@@ -1,0 +1,48 @@
+{
+  "name": "@workser/cli",
+  "version": "0.1.0",
+  "description": "Workser CLI — give your local AI agent native DevOps & infrastructure on Workser. The agent runs `workser …` to provision, deploy, and manage real apps.",
+  "type": "module",
+  "bin": {
+    "workser": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "AGENTS.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.9.0"
+  },
+  "keywords": [
+    "workser",
+    "ai-agent",
+    "devops",
+    "deploy",
+    "cli",
+    "mcp",
+    "claude-code",
+    "codex"
+  ],
+  "license": "UNLICENSED",
+  "private": true
+}
