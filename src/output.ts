@@ -1,5 +1,6 @@
 import pc from "picocolors";
 import { WorkserError } from "./errors.js";
+import { OWNER_ONLY_EXIT } from "./capabilities.js";
 
 /**
  * Output is designed to be read by BOTH humans and AI agents.
@@ -77,6 +78,8 @@ export function fail(err: unknown): never {
       process.stderr.write(pc.dim("  Run `workser project use <id>` or pass --project <id>.\n"));
     } else if (e.code === "awaiting_approval") {
       process.stderr.write(pc.dim("  Approve the action in Workser Orbit, then retry.\n"));
+    } else if (e.code === "owner_only") {
+      process.stderr.write(pc.dim("  This is an owner action — do it in the Workser Orbit app.\n"));
     }
   }
   process.exit(exitCodeFor(e));
@@ -86,5 +89,6 @@ function exitCodeFor(e: WorkserError): number {
   if (e.code === "not_connected") return 4;
   if (e.status === 401 || e.code === "unauthorized") return 3;
   if (e.code === "awaiting_approval") return 5;
+  if (e.code === "owner_only") return OWNER_ONLY_EXIT;
   return 1;
 }

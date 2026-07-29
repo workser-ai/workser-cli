@@ -3,26 +3,23 @@ import pc from "picocolors";
 import { action } from "../run.js";
 import { api } from "../client.js";
 import { requireProject } from "../context.js";
-import { ok, success, line } from "../output.js";
+import { ownerOnly } from "../capabilities.js";
+import { ok, line } from "../output.js";
 
 export function registerDomain(program: Command): void {
-  const domain = program.command("domain").description("Attach and list custom domains");
+  const domain = program.command("domain").description("Inspect the project's custom domains");
 
   domain
     .command("set <domain>")
-    .description("Attach a custom domain to the project (returns DNS instructions)")
+    .description("(owner-only) Attach a custom domain — do this in Workser Orbit")
     .action(
-      action(async ({ ctx, args }) => {
-        const projectId = requireProject(ctx);
-        const res = await api(ctx, `/v1/projects/${projectId}/domains`, { body: { domain: args[0] } });
-        ok(res, () => {
-          success(`Attached ${pc.bold(args[0])}.`);
-          if (res.dns?.length) {
-            line(pc.dim("Add these DNS records:"));
-            for (const r of res.dns) line(`  ${r.type}  ${r.name}  →  ${r.value}`);
-          }
-        });
-      }),
+      action(() =>
+        ownerOnly({
+          action: "domain set",
+          reason: "attaching a custom domain",
+          owner: "add the domain (and verify DNS)",
+        }),
+      ),
     );
 
   domain

@@ -19,6 +19,19 @@ export interface Context {
   mode: "daemon" | "cloud";
   cwd: string;
   projectId?: string;
+  /**
+   * The agent run this CLI invocation is executing inside, if any.
+   *
+   * Orbit sets `WORKSER_RUN_ID` on the agent process it spawns, so anything
+   * the agent shells out to inherits it. That is what lets `workser artifact
+   * add` attach a deliverable to the right task without the agent having to
+   * know a task id, and what makes `workser ask` able to put a question on the
+   * conversation the user is actually looking at.
+   *
+   * Absent when the CLI is run by hand, or from CI — commands that need a run
+   * say so rather than guessing.
+   */
+  runId?: string;
 }
 
 const CLOUD_DEFAULT = process.env.WORKSER_API_URL || "https://api.workser.ai";
@@ -49,9 +62,27 @@ export function buildContext(opts: GlobalOpts): Context {
     : "cloud";
 
   const link = readProjectLink(cwd);
-  const projectId = opts.project || link?.projectId || session.defaultProjectId;
+  // A run always knows its own project; prefer it over the cwd link so an
+  // agent working in a subfolder still records against the right project.
+  const projectId =
+    opts.project ||
+    process.env.WORKSER_PROJECT_ID ||
+    link?.projectId ||
+    session.defaultProjectId;
 
-  return { endpoint, token, mode, cwd, projectId };
+  const runId = process.env.WORKSER_RUN_ID || undefined;
+
+  return { endpoint, token, mode, cwd, projectId, runId };
+}
+
+/**
+ * The run to address, or `current` — which the daemon resolves to the sole
+ * active run. Falling back rather than erroring keeps the CLI usable when an
+ * agent shells out through something that drops the environment (a nested
+ * shell, a wrapper script).
+ */
+export function runTarget(ctx: Context): string {
+  return ctx.runId || "current";
 }
 
 export function requireProject(ctx: Context): string {
