@@ -11,16 +11,32 @@ export interface RequestOpts {
  * The single HTTP entrypoint. Every command goes through here so auth,
  * error normalization, and the `{ data }` envelope are handled in one place.
  *
- * The endpoint contract (same shape whether served by the local daemon or cloud):
- *   GET    /v1/whoami
- *   GET    /v1/status?project=:id
- *   GET    /v1/projects                         POST /v1/projects {name}
- *   POST   /v1/projects/:id/provision/database  | /auth | /storage
- *   GET    /v1/projects/:id/env                 POST /v1/projects/:id/env {key,value}
- *   POST   /v1/projects/:id/deploy {prod}       GET  /v1/deployments/:id
- *   GET    /v1/projects/:id/logs                POST /v1/projects/:id/domains {domain}
+ * The CLI talks to the local Orbit daemon over `/v1/*`; the daemon proxies
+ * core-api's `/orbit/*` controller (identical shapes) and wraps replies in
+ * `{ ok, data }`. Every route targets the ONE project pinned to the cwd.
  *
- * Destructive/financial actions may return HTTP 423 { code: "awaiting_approval" }
+ * Reads:
+ *   GET  /v1/whoami                              GET  /v1/status?project=:id
+ *   GET  /v1/projects                            GET  /v1/projects/:id
+ *   GET  /v1/projects/:id/databases              GET  /v1/projects/:id/databases/connection-string
+ *   GET  /v1/projects/:id/auth                   GET  /v1/projects/:id/storage
+ *   GET  /v1/projects/:id/storage/files?prefix   GET  /v1/projects/:id/env
+ *   GET  /v1/projects/:id/env/:key               GET  /v1/projects/:id/domains
+ *   GET  /v1/projects/:id/versions               GET  /v1/projects/:id/logs
+ *   GET  /v1/projects/:id/deployments/latest     GET  /v1/deployments/:id
+ * Neon Postgres browser:
+ *   GET  /v1/projects/:id/db/tables              GET  /v1/projects/:id/db/tables/:t/schema
+ *   GET  /v1/projects/:id/db/tables/:t/data      POST /v1/projects/:id/db/query {query}
+ * Operate within the pinned project (daemon gates the sensitive ones):
+ *   POST /v1/projects/:id/provision/{database|auth|storage}
+ *   POST /v1/projects/:id/env {vars:[{key,value}]}
+ *   POST /v1/projects/:id/storage/upload-base64 {filename, folder?, dataBase64}
+ *   POST /v1/projects/:id/deploy {prod}
+ *
+ * Owner-only actions (create/switch projects, delete config, attach domains)
+ * are refused client-side before any network call — see capabilities.ts.
+ *
+ * Allowed-but-gated actions may return HTTP 423 { code: "awaiting_approval" }
  * while the daemon waits for the user to approve in the Orbit UI.
  */
 export async function api<T = any>(
@@ -62,15 +78,27 @@ export async function api<T = any>(
   const data = text ? safeJson(text) : undefined;
 
   if (!res.ok) {
-    if (res.status === 423 || data?.code === "awaiting_approval") {
+    // The daemon sometimes nests the real error one level down as
+    // { error: { code, message } } (in addition to the flat form). Read both.
+    const nested =
+      data && typeof data === "object" && data.error && typeof data.error === "object"
+        ? (data.error as { code?: string; message?: string })
+        : undefined;
+    const code = data?.code ?? nested?.code;
+
+    if (res.status === 423 || code === "awaiting_approval") {
       throw new WorkserError(
-        data?.message ?? "Action is awaiting your approval in Workser Orbit.",
+        data?.message ?? nested?.message ?? "Action is awaiting your approval in Workser Orbit.",
         { code: "awaiting_approval", status: res.status, details: data },
       );
     }
-    const message = data?.message || data?.error || `${res.status} ${res.statusText}`;
+    const message =
+      data?.message ||
+      nested?.message ||
+      (typeof data?.error === "string" ? data.error : undefined) ||
+      `${res.status} ${res.statusText}`;
     throw new WorkserError(String(message), {
-      code: data?.code ?? (res.status === 401 ? "unauthorized" : "http_error"),
+      code: code ?? (res.status === 401 ? "unauthorized" : "http_error"),
       status: res.status,
       details: data,
     });

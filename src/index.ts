@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { configureOutput, fail } from "./output.js";
 
@@ -13,13 +10,27 @@ import { registerAuth } from "./commands/auth.js";
 import { registerStorage } from "./commands/storage.js";
 import { registerEnv } from "./commands/env.js";
 import { registerDeploy } from "./commands/deploy.js";
+import { registerVersions } from "./commands/versions.js";
 import { registerLogs } from "./commands/logs.js";
 import { registerDomain } from "./commands/domain.js";
 import { registerOpen } from "./commands/open.js";
+import { registerDoctor } from "./commands/doctor.js";
+import { registerAgent } from "./commands/agent.js";
+import { registerVerify } from "./commands/verify.js";
+import { registerWorkflow } from "./commands/workflow.js";
+import { registerApp } from "./commands/app.js";
+import { registerTool } from "./commands/tool.js";
+import { registerMemory } from "./commands/memory.js";
+import { registerBusiness } from "./commands/business.js";
+import { registerArtifact } from "./commands/artifact.js";
+import { registerAsk } from "./commands/ask.js";
 
-const pkg = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "package.json"), "utf8"),
-);
+// Version is inlined at build time (see `define` in tsup.config.ts) so the
+// single self-contained dist/index.js needs no sibling package.json at runtime.
+declare const __WORKSER_VERSION__: string;
+const pkg = {
+  version: typeof __WORKSER_VERSION__ === "string" ? __WORKSER_VERSION__ : "0.0.0-dev",
+};
 
 const program = new Command();
 
@@ -52,8 +63,19 @@ registerAuth(program);
 registerStorage(program);
 registerEnv(program);
 registerDeploy(program);
+registerVersions(program);
 registerLogs(program);
 registerDomain(program);
 registerOpen(program);
+registerDoctor(program);
+registerAgent(program);
+registerVerify(program);
+registerWorkflow(program);
+registerApp(program);
+registerTool(program);
+registerMemory(program);
+registerBusiness(program);
+registerArtifact(program);
+registerAsk(program);
 
 program.parseAsync(process.argv).catch((e) => fail(e));
