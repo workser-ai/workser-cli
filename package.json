@@ -2,6 +2,7 @@
   "name": "@workser/cli",
   "version": "0.1.0",
   "description": "Workser CLI — give your local AI agent native DevOps & infrastructure on Workser. The agent runs `workser …` to provision, deploy, and manage real apps.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "workser": "dist/index.js"
@@ -10,10 +11,22 @@
     "dist",
     "skills",
     "AGENTS.md",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/workser-web/workser-cli.git"
+  },
+  "homepage": "https://docs.workser.ai/developers/cli",
+  "bugs": {
+    "url": "https://github.com/workser-web/workser-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsup",
@@ -23,7 +36,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "node dist/index.js",
     "test": "npm run build && vitest run",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run typecheck && npm run test"
   },
   "dependencies": {
     "commander": "^14.0.0",
@@ -44,7 +57,5 @@
     "mcp",
     "claude-code",
     "codex"
-  ],
-  "license": "UNLICENSED",
-  "private": true
+  ]
 }

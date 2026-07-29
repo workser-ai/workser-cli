@@ -6,3 +6,6 @@ dist/
 .env.*
 .workser/
 coverage/
+
+# npm pack output
+*.tgz

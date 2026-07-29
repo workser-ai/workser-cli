@@ -5,6 +5,46 @@ local AI agent use Workser infrastructure natively — as the user's DevOps engi
 The agent runs `workser deploy`, `workser env set`, `workser status`, etc. through
 its own shell to ship and operate the app on Workser.
 
+## Install
+
+```bash
+npm install -g @workser/cli
+workser --version
+```
+
+Node 20+. If you use **Workser Desktop**, it installs and updates this for you —
+you only need the manual install to use `workser` on its own, alongside Claude
+Code, Codex, Cursor or any other agent.
+
+### Using it standalone
+
+Inside Workser Desktop the CLI talks to the local Orbit daemon, so every call
+flows through the app's approval gates. On its own it talks to the Workser cloud
+API instead:
+
+```bash
+workser login            # paste an API token, or pass --token
+workser status           # confirm the connection and the linked project
+workser doctor           # resolved endpoint, mode, token presence (masked)
+```
+
+Point your agent at it by telling it the command exists. For Claude Code, the
+package ships a skill at `skills/workser/SKILL.md`; for Codex, Gemini, Kimi and
+others, `AGENTS.md` covers the same ground. Copy whichever your agent reads:
+
+```bash
+# Claude Code (global)
+mkdir -p ~/.claude/skills/workser
+cp "$(npm root -g)/@workser/cli/skills/workser/SKILL.md" ~/.claude/skills/workser/
+
+# Codex / Gemini / Kimi / opencode / Grok — merge into your project's AGENTS.md
+cat "$(npm root -g)/@workser/cli/AGENTS.md" >> AGENTS.md
+```
+
+Agents should always pass `--json`.
+
+
+
 ### Scope: one project, operate within it
 
 The CLI is the **agent-facing** surface, and it is deliberately small. It is bound
