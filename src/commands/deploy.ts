@@ -14,11 +14,22 @@ export function registerDeploy(program: Command): void {
     .description("Deploy the current project to Workser (git → Vercel) and return a live URL")
     .option("--prod", "deploy to production", false)
     .option("--watch", "wait for the deploy to finish, streaming status", false)
+    .option(
+      "--app <webAppId>",
+      "which app to publish (default: the app this folder is linked to)",
+    )
     .action(
       action(async ({ ctx, opts }) => {
         const projectId = requireProject(ctx);
+        // `--app` is rarely needed: the daemon resolves the app from the folder
+        // being deployed, which is the same question. It matters when one folder
+        // is linked to nothing, or when deploying from outside a linked folder.
         const dep = await api(ctx, `/v1/projects/${projectId}/deploy`, {
-          body: { prod: Boolean(opts.prod), cwd: ctx.cwd },
+          body: {
+            prod: Boolean(opts.prod),
+            cwd: ctx.cwd,
+            ...(opts.app ? { webAppId: opts.app } : {}),
+          },
         });
 
         if (opts.watch && dep?.id) {

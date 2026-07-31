@@ -14,6 +14,13 @@ export interface GlobalOpts {
 export interface Context {
   /** Base URL the CLI talks to: the local Orbit daemon, or Workser cloud. */
   endpoint: string;
+  /**
+   * When set, requests go over this Unix socket / named pipe instead of TCP,
+   * and no token is sent — reaching the socket is the authorization. This is
+   * how Orbit connects the CLI now; `token` stays for cloud and for the
+   * fallback where the daemon could not bind a socket.
+   */
+  socketPath?: string;
   token?: string;
   /** "daemon" = local Orbit app (approval gates + UI); "cloud" = direct API. */
   mode: "daemon" | "cloud";
@@ -50,16 +57,34 @@ export function buildContext(opts: GlobalOpts): Context {
   const session = readSession();
   const cwd = opts.cwd ? resolve(opts.cwd) : process.cwd();
 
-  const endpointRaw =
-    opts.endpoint || process.env.WORKSER_DAEMON_URL || session.endpoint || CLOUD_DEFAULT;
-  const endpoint = endpointRaw.replace(/\/+$/, "");
   const token = opts.token || process.env.WORKSER_TOKEN || session.token;
 
-  const mode: Context["mode"] = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(
-    endpoint,
-  )
+  // An explicit --endpoint/--token (or the env equivalents) means the caller is
+  // deliberately targeting something else — honour it and ignore the socket,
+  // otherwise `--endpoint https://api.workser.ai` would silently keep talking
+  // to the local daemon.
+  const overridden = Boolean(
+    opts.endpoint || opts.token || process.env.WORKSER_DAEMON_URL || process.env.WORKSER_TOKEN,
+  );
+  const socketPath = overridden ? undefined : session.socketPath;
+
+  // On the socket the handshake carries no `endpoint` — there is no TCP
+  // listener to name. Only the path+query is ever sent, so this base exists
+  // purely to build a URL, and it keeps error messages saying "local daemon"
+  // rather than naming the cloud API the CLI is not talking to.
+  const endpointRaw = socketPath
+    ? "http://localhost"
+    : opts.endpoint ||
+      process.env.WORKSER_DAEMON_URL ||
+      session.endpoint ||
+      CLOUD_DEFAULT;
+  const endpoint = endpointRaw.replace(/\/+$/, "");
+
+  const mode: Context["mode"] = socketPath
     ? "daemon"
-    : "cloud";
+    : /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/i.test(endpoint)
+      ? "daemon"
+      : "cloud";
 
   const link = readProjectLink(cwd);
   // A run always knows its own project; prefer it over the cwd link so an
@@ -72,7 +97,7 @@ export function buildContext(opts: GlobalOpts): Context {
 
   const runId = process.env.WORKSER_RUN_ID || undefined;
 
-  return { endpoint, token, mode, cwd, projectId, runId };
+  return { endpoint, socketPath, token, mode, cwd, projectId, runId };
 }
 
 /**

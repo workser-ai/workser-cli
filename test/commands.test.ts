@@ -12,12 +12,16 @@ let work: string;
 const TOKEN = "tok_abcdef123456";
 
 /** Run a CLI command against the stub with --json, hermetic HOME + cwd. */
-function cli(args: string[], extra: { cwd?: string } = {}) {
+function cli(
+  args: string[],
+  extra: { cwd?: string; env?: Record<string, string> } = {},
+) {
   return runCli(["--json", ...args], {
     endpoint: stub.endpoint,
     token: TOKEN,
     home,
     cwd: extra.cwd ?? work,
+    env: extra.env,
   });
 }
 
@@ -48,6 +52,15 @@ describe("request shapes + --json envelope", () => {
     expect(r.json.data.project.id).toBe("p_1");
   });
 
+  it("an Orbit agent run identifies itself to the local daemon", async () => {
+    const r = await cli(["status", "--project", "p_1"], {
+      env: { WORKSER_RUN_ID: "conversation-123" },
+    });
+
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest?.runId).toBe("conversation-123");
+  });
+
   it("project show → GET /v1/projects/:id (the pinned project)", async () => {
     const r = await cli(["project", "show", "--project", "p_1"]);
     expect(r.code).toBe(0);
@@ -58,7 +71,14 @@ describe("request shapes + --json envelope", () => {
   });
 
   it("env set → POST /v1/projects/:id/env {vars:[{key,value}]}", async () => {
-    const r = await cli(["env", "set", "API_KEY=sk-123", "NODE_ENV=prod", "--project", "p_1"]);
+    const r = await cli([
+      "env",
+      "set",
+      "API_KEY=sk-123",
+      "NODE_ENV=prod",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     const req = stub.lastRequest!;
     expect(req.method).toBe("POST");
@@ -87,7 +107,10 @@ describe("request shapes + --json envelope", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/env/API_KEY");
-    expect(r.json.data).toMatchObject({ key: "API_KEY", value: "secret-value" });
+    expect(r.json.data).toMatchObject({
+      key: "API_KEY",
+      value: "secret-value",
+    });
   });
 
   // Env is app-scoped (1 app = 1 repo = 1 Vercel project). `--app` targets one;
@@ -95,7 +118,13 @@ describe("request shapes + --json envelope", () => {
   // above must continue to send NO webAppId — that's the back-compat contract.
   it("env set --app → POST /v1/projects/:id/env with webAppId", async () => {
     const r = await cli([
-      "env", "set", "API_KEY=sk-123", "--project", "p_1", "--app", "wa_2",
+      "env",
+      "set",
+      "API_KEY=sk-123",
+      "--project",
+      "p_1",
+      "--app",
+      "wa_2",
     ]);
     expect(r.code).toBe(0);
     const req = stub.lastRequest!;
@@ -113,7 +142,13 @@ describe("request shapes + --json envelope", () => {
 
   it("env get --app → GET /v1/projects/:id/env/:key with webAppId", async () => {
     const r = await cli([
-      "env", "get", "API_KEY", "--project", "p_1", "--app", "wa_2",
+      "env",
+      "get",
+      "API_KEY",
+      "--project",
+      "p_1",
+      "--app",
+      "wa_2",
     ]);
     expect(r.code).toBe(0);
     const req = stub.lastRequest!;
@@ -135,7 +170,10 @@ describe("request shapes + --json envelope", () => {
     expect(req.path).toBe("/v1/projects/p_1/deploy");
     expect(req.body).toMatchObject({ prod: true });
     expect((req.body as any).cwd).toBeTypeOf("string");
-    expect(r.json).toEqual({ ok: true, data: { id: "d_new", status: "building" } });
+    expect(r.json).toEqual({
+      ok: true,
+      data: { id: "d_new", status: "building" },
+    });
   });
 
   it("whoami → GET /v1/whoami", async () => {
@@ -146,7 +184,11 @@ describe("request shapes + --json envelope", () => {
     expect(req.path).toBe("/v1/whoami");
     expect(req.query).toEqual({});
     expect(r.json.data.email).toBe("khemmapich@gmail.com");
-    expect(r.json.data.workspace).toMatchObject({ id: "w_1", name: "Acme", defaultProjectId: "p_1" });
+    expect(r.json.data.workspace).toMatchObject({
+      id: "w_1",
+      name: "Acme",
+      defaultProjectId: "p_1",
+    });
   });
 
   it("logs → GET /v1/projects/:id/logs?lines (entries + cursor shape)", async () => {
@@ -157,7 +199,11 @@ describe("request shapes + --json envelope", () => {
     expect(req.path).toBe("/v1/projects/p_1/logs");
     expect(req.query.lines).toBe("50");
     expect(Array.isArray(r.json.data.entries)).toBe(true);
-    expect(r.json.data.entries[0]).toMatchObject({ ts: "t0", level: "info", message: "hello" });
+    expect(r.json.data.entries[0]).toMatchObject({
+      ts: "t0",
+      level: "info",
+      message: "hello",
+    });
     expect(r.json.data.cursor).toBe("c1");
   });
 
@@ -168,7 +214,10 @@ describe("request shapes + --json envelope", () => {
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/domains");
     expect(Array.isArray(r.json.data)).toBe(true);
-    expect(r.json.data[0]).toMatchObject({ domain: "example.com", status: "active" });
+    expect(r.json.data[0]).toMatchObject({
+      domain: "example.com",
+      status: "active",
+    });
   });
 
   it("storage list → GET /v1/projects/:id/storage", async () => {
@@ -187,7 +236,11 @@ describe("request shapes + --json envelope", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/auth");
-    expect(r.json.data).toMatchObject({ enabled: true, providers: ["email"], authMode: "self_hosted" });
+    expect(r.json.data).toMatchObject({
+      enabled: true,
+      providers: ["email"],
+      authMode: "self_hosted",
+    });
   });
 
   it("db url → GET /v1/projects/:id/databases/connection-string ({connection_string})", async () => {
@@ -196,7 +249,11 @@ describe("request shapes + --json envelope", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/databases/connection-string");
-    expect(r.json.data).toMatchObject({ connection_string: "postgres://u:p@host/db", role: "workser_app_x", scoped: true });
+    expect(r.json.data).toMatchObject({
+      connection_string: "postgres://u:p@host/db",
+      role: "workser_app_x",
+      scoped: true,
+    });
     // The human line prints the connection string; the value is present.
     expect(r.stdout).toContain("postgres://u:p@host/db");
   });
@@ -208,7 +265,11 @@ describe("request shapes + --json envelope", () => {
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/databases");
     expect(Array.isArray(r.json.data)).toBe(true);
-    expect(r.json.data[0]).toMatchObject({ name: "demo-db", region: "us-east-1", status: "ready" });
+    expect(r.json.data[0]).toMatchObject({
+      name: "demo-db",
+      region: "us-east-1",
+      status: "ready",
+    });
   });
 
   it("deploy status → GET /v1/projects/:id/deployments/latest", async () => {
@@ -217,7 +278,11 @@ describe("request shapes + --json envelope", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/deployments/latest");
-    expect(r.json.data).toMatchObject({ id: "d_1", status: "ready", url: "https://demo.workser.app" });
+    expect(r.json.data).toMatchObject({
+      id: "d_1",
+      status: "ready",
+      url: "https://demo.workser.app",
+    });
   });
 
   it("deploy status <id> → GET /v1/deployments/:id", async () => {
@@ -258,7 +323,10 @@ describe("request shapes + --json envelope", () => {
     expect(Array.isArray(r.json.data.roles)).toBe(true);
     expect(r.json.data.roles).toHaveLength(2);
     expect(r.json.data.roles[0]).toMatchObject({ role: "qa", agent: "codex" });
-    expect(r.json.data.roles[1]).toMatchObject({ role: "designer", agent: "claude_code" });
+    expect(r.json.data.roles[1]).toMatchObject({
+      role: "designer",
+      agent: "claude_code",
+    });
   });
 
   it("agent main → GET /v1/agents (main + backup agent)", async () => {
@@ -267,7 +335,10 @@ describe("request shapes + --json envelope", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/agents");
-    expect(r.json.data).toEqual({ mainAgent: "claude_code", backupAgent: "codex" });
+    expect(r.json.data).toEqual({
+      mainAgent: "claude_code",
+      backupAgent: "codex",
+    });
   });
 
   it("agent run → POST /v1/agents/run {role, task} (joins task args, prints output)", async () => {
@@ -277,7 +348,12 @@ describe("request shapes + --json envelope", () => {
     expect(req.method).toBe("POST");
     expect(req.path).toBe("/v1/agents/run");
     expect(req.body).toEqual({ role: "qa", task: "review the diff" });
-    expect(r.json.data).toMatchObject({ role: "qa", agent: "codex", output: "ran qa on the task", exitCode: 0 });
+    expect(r.json.data).toMatchObject({
+      role: "qa",
+      agent: "codex",
+      output: "ran qa on the task",
+      exitCode: 0,
+    });
   });
 
   it("agent run → non-zero subagent exitCode reflected in CLI exit code", async () => {
@@ -309,7 +385,14 @@ describe("storage objects (operate inside the bucket)", () => {
     rmSync(file, { force: true });
     const { writeFileSync } = await import("node:fs");
     writeFileSync(file, "hello world");
-    const r = await cli(["storage", "put", file, "uploads/hello.txt", "--project", "p_1"]);
+    const r = await cli([
+      "storage",
+      "put",
+      file,
+      "uploads/hello.txt",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     const up = stub.find("POST", "/v1/projects/p_1/storage/upload-base64")!;
     expect(up.body).toMatchObject({
@@ -325,7 +408,14 @@ describe("storage objects (operate inside the bucket)", () => {
     rmSync(file, { force: true });
     const { writeFileSync } = await import("node:fs");
     writeFileSync(file, "x");
-    const r = await cli(["storage", "put", file, "root.txt", "--project", "p_1"]);
+    const r = await cli([
+      "storage",
+      "put",
+      file,
+      "root.txt",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     const up = stub.find("POST", "/v1/projects/p_1/storage/upload-base64")!;
     expect(up.body).toMatchObject({ filename: "root.txt" });
@@ -343,7 +433,14 @@ describe("storage objects (operate inside the bucket)", () => {
   it("storage get <dest> → downloads bytes to the dest file", async () => {
     const dest = join(work, "out.bin");
     rmSync(dest, { force: true });
-    const r = await cli(["storage", "get", "logo.png", dest, "--project", "p_1"]);
+    const r = await cli([
+      "storage",
+      "get",
+      "logo.png",
+      dest,
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     expect(readFileSync(dest, "utf8")).toBe("object-bytes");
     expect(r.json.data).toMatchObject({ key: "logo.png", dest });
@@ -403,7 +500,10 @@ describe("neon postgres browser", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/db/tables");
-    expect(r.json.data[0]).toMatchObject({ table_name: "users", column_count: 4 });
+    expect(r.json.data[0]).toMatchObject({
+      table_name: "users",
+      column_count: 4,
+    });
   });
 
   it("db schema <table> → GET /v1/projects/:id/db/tables/:t/schema", async () => {
@@ -412,11 +512,24 @@ describe("neon postgres browser", () => {
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
     expect(req.path).toBe("/v1/projects/p_1/db/tables/users/schema");
-    expect(r.json.data[0]).toMatchObject({ column_name: "id", data_type: "uuid" });
+    expect(r.json.data[0]).toMatchObject({
+      column_name: "id",
+      data_type: "uuid",
+    });
   });
 
   it("db data <table> → GET /v1/projects/:id/db/tables/:t/data?limit&offset", async () => {
-    const r = await cli(["db", "data", "users", "--limit", "10", "--offset", "5", "--project", "p_1"]);
+    const r = await cli([
+      "db",
+      "data",
+      "users",
+      "--limit",
+      "10",
+      "--offset",
+      "5",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     const req = stub.lastRequest!;
     expect(req.method).toBe("GET");
@@ -456,7 +569,10 @@ describe("owner-only boundary (agent cannot administer the project set / destroy
     { name: "project create", argv: ["project", "create", "blog"] },
     { name: "project use", argv: ["project", "use", "p_2"] },
     { name: "env rm", argv: ["env", "rm", "API_KEY", "--project", "p_1"] },
-    { name: "domain set", argv: ["domain", "set", "example.com", "--project", "p_1"] },
+    {
+      name: "domain set",
+      argv: ["domain", "set", "example.com", "--project", "p_1"],
+    },
   ];
 
   for (const c of cases) {
@@ -490,7 +606,10 @@ describe("deploy --watch polling", () => {
     expect(polls.length).toBe(3);
 
     // Stops on the terminal status and returns it.
-    expect(r.json).toEqual({ ok: true, data: { id: "d_new", status: "ready", url: "https://demo.workser.app" } });
+    expect(r.json).toEqual({
+      ok: true,
+      data: { id: "d_new", status: "ready", url: "https://demo.workser.app" },
+    });
   });
 });
 
@@ -527,7 +646,13 @@ describe("exit codes", () => {
   it("nested daemon error { error:{code,message} } is surfaced cleanly (not [object Object])", async () => {
     stub.overrides.set("GET /v1/projects/p_1/databases/connection-string", {
       status: 404,
-      body: { ok: false, error: { code: "not_provisioned", message: "connection not provisioned yet" } },
+      body: {
+        ok: false,
+        error: {
+          code: "not_provisioned",
+          message: "connection not provisioned yet",
+        },
+      },
     });
     const r = await cli(["db", "url", "--project", "p_1"]);
     expect(r.code).toBe(1);

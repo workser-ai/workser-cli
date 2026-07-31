@@ -53,6 +53,14 @@ workser storage create [name] | list          # provision + show the bucket
 workser storage ls [prefix]                   # list objects in the bucket
 workser storage put <local> <key>             # upload a file into the bucket
 workser storage get <key> [dest]              # download (or print the object URL)
+
+workser neon status                           # can this project use Neon storage/functions?
+workser neon storage list | create <name> | rm <bucket>
+workser neon storage ls <bucket> [prefix]     # list objects
+workser neon storage put <bucket> <local> [key] | get <bucket> <key> [dest]
+workser neon storage url <bucket> <key>       # temporary download URL
+workser neon functions list | deploy <slug> <zip> | rm <slug>
+
 workser deploy [--prod] [--watch] | deploy status [id]
 workser logs [-n N] [-f] | versions
 workser domain list                           # custom domains (read)
@@ -133,6 +141,33 @@ on and state clearly what you assumed.
 **Never ask for a secret value this way** — the answer is stored and displayed. Ask
 where a key should go, then have the user set it (`workser env set` writes it without
 you ever seeing it).
+
+## Neon backend (the project's own storage + functions)
+Beyond the default bucket (`workser storage`, shared Cloudflare R2), a project can
+have its OWN infrastructure on its Neon branch: S3-compatible buckets and Node.js
+HTTP functions, both branching with the database.
+
+**Run `workser neon status --json` before using either.** It tells you three things,
+and all three must be true: the project is on dedicated infrastructure, the capability
+is switched on, and the project's REGION supports it. Region matters most — Neon's
+storage/functions run only in certain regions, and a project's region is fixed when
+it was created. `regionSupportsNeonBackend: false` is final: don't retry, don't look
+for a workaround, tell the user the project's region can't host it and use
+`workser storage` (the default bucket) instead.
+
+```
+workser neon storage create assets            # make a bucket
+workser neon storage put assets ./logo.png    # upload (bytes go straight to Neon)
+workser neon storage url assets logo.png      # temporary link to share
+workser neon functions deploy api ./api.zip   # deploy a Node.js HTTP handler
+```
+Deleting a bucket, an object, or a function is approval-gated — expect exit 5 /
+`awaiting_approval`, ask the user to approve, then retry.
+
+Prefer `workser storage` for ordinary file storage. Reach for `workser neon storage`
+when the files should live on the project's own infrastructure (isolated per project,
+branching with the database), and `workser neon functions` when the app needs
+server-side endpoints next to its data.
 
 ## Computer-use tools (your hands on this machine)
 `workser tool list` shows what's available — filesystem (read/write/list/delete/move),

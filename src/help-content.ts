@@ -1,0 +1,516 @@
+/**
+ * GENERATED — do not edit.
+ *
+ * Run `npm run build:help` after changing a file in `skills/workser/reference/`.
+ * `test/help.test.ts` fails when this file has drifted from them, or when a
+ * registered command is covered by no topic at all.
+ */
+
+export interface HelpTopic {
+  topic: string;
+  title: string;
+  summary: string;
+  /** Top-level commands this topic documents. Checked against the real ones. */
+  commands: readonly string[];
+  /** Canonical markdown this was generated from. */
+  source: string;
+  body: string;
+}
+
+export const HELP_TOPICS: readonly HelpTopic[] = [
+  {
+    topic: "automation",
+    title: "Workflows & connected apps",
+    summary: "Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.",
+    commands: ["workflow","app"],
+    source: "skills/workser/reference/automation.md",
+    body: `# Workflows & connected apps
+
+Wire up **automations** that keep running after you're done, and use third-party
+accounts (Gmail, Slack, Stripe, Google Sheets) the project has connected.
+
+\`\`\`
+workser workflow list | create <name> [--body <json>] | get <id>
+workser workflow activate <id> | deactivate <id> | run <id> [--wait] [--body <json>]
+workser workflow runs <id>          # past executions of a workflow
+workser workflow nodes [query]      # search the node-type catalog
+
+workser app list [--toolkit <slug>] # connectable + connected third-party apps
+workser app connect <toolkit> | disconnect <connectionId>
+workser app tools <toolkit>         # a connected app's callable actions
+workser app run <toolSlug> [--body <json>]  # execute one action
+\`\`\`
+
+## Building a workflow
+
+\`workser workflow create\` builds an event-driven, multi-step automation — the same
+engine Workser's own web Workflow tab uses. Nodes, connections and triggers go in
+\`--body\` as JSON.
+
+**Browse \`workser workflow nodes\` first.** Inventing a node type that doesn't exist
+produces a workflow that saves and then never runs.
+
+Created workflows start inactive: \`workser workflow activate <id>\` when it's ready.
+
+## Using a connected app
+
+1. \`workser app list\` — check what's already connected before asking for anything.
+2. If it isn't: \`workser app connect <toolkit>\` returns an OAuth link. The **user**
+   must open it; you cannot complete OAuth on their behalf. Wait, then continue.
+3. \`workser app tools <toolkit>\` — read the argument schema rather than guessing
+   field names.
+4. \`workser app run <toolSlug> --body '{"…":…}'\` — e.g. \`GOOGLESHEETS_APPEND_ROW\`,
+   \`GMAIL_SEND_EMAIL\`.
+
+**A \`run\` is a real side effect in someone's real account.** Sending an email or
+charging a card is not a dry run — say what you're about to do before you do it.
+
+## The half people forget
+
+A workflow-backed feature is two-way. Triggering it is the outbound half; when the
+workflow produces a result the app needs, its final node has to POST back to a
+webhook route in the app. Build only the trigger and the workflow runs perfectly
+while nothing ever appears in the product. The app-side receiver is covered in the
+\`workser-sdk\` skill under workflows.
+`,
+  },
+  {
+    topic: "business",
+    title: "Business hub data",
+    summary: "Products, orders, customers, sales, content, marketing, support, analytics.",
+    commands: ["business"],
+    source: "skills/workser/reference/business-data.md",
+    body: `# Business hub data
+
+The project's own commerce and CRM records — the **same rows** the Orbit desktop
+Business tab and workser-web's Business hub show. One generic CRUD surface across
+every resource rather than a command per domain.
+
+\`\`\`
+workser business resources                        # the known resource names
+workser business list <resource> [subpath]        # list/read  (--query '<json>')
+workser business get <resource> <id>
+workser business create <resource> --body '<json>'
+workser business update <resource> <id> --body '<json>'
+workser business delete <resource> <id>
+workser business action <resource> <id> <verb>    # POST .../<id>/<verb>
+\`\`\`
+
+## Resources
+
+\`business-config\`, \`business-settings\`, \`products\`, \`collections\`, \`navigations\`,
+\`orders\`, \`customers\`, \`sales-pipelines\`, \`sales-deals\`, \`pages\`, \`blog-posts\`,
+\`media\`, \`campaigns\`, \`email-templates\`, \`discounts\`, \`seo-configs\`,
+\`social-accounts\`, \`support-conversations\`, \`automation-rules\`, \`analytics\`.
+
+Run \`workser business resources --json\` rather than trusting this list — the CLI's
+copy is the current one.
+
+## Notes that matter
+
+- **Sales and Support nest.** \`sales-deals\` maps to \`/sales/deals\`,
+  \`support-conversations\` to \`/support/conversations\`. Use the dashed names above;
+  the flat \`resource/id\` shape then works for \`get\`/\`update\`/\`delete\`/\`action\`.
+- **\`list\` takes a raw subpath** for anything the map doesn't cover:
+  \`workser business list sales-pipelines <id>/stages\`.
+- **\`action\` is for named verbs** — \`workser business action orders <id> cancel\`,
+  \`workser business action sales-deals <dealId> win\`. Check the resource's routes
+  before inventing a verb.
+- **These are real business records.** Cancelling an order or deleting a customer is
+  not a dry run. Say what you're about to do first.
+
+## This is for you, not for the app
+
+\`workser business\` is how **you** inspect and fix data while building. The app reads
+the same records at runtime through \`workser.business\` in \`@workser/app\` — see the
+\`workser-sdk\` skill. An app shelling out to this CLI per request is wrong.
+`,
+  },
+  {
+    topic: "computer-use",
+    title: "Computer-use tools",
+    summary: "Files, shell, screen, input, clipboard and browser on this machine.",
+    commands: ["tool"],
+    source: "skills/workser/reference/computer-use.md",
+    body: `# Computer-use tools — your hands on this machine
+
+\`\`\`
+workser tool list                        # what's available to you right now
+workser tool run <name> [--body <json>]  # run one
+\`\`\`
+
+\`workser tool list\` shows what's available — filesystem (read/write/list/delete/move),
+shell (run a command / Python / Node), screenshots and screen info, mouse and keyboard
+input, clipboard, notifications, and basic browser control (open a URL, read the page,
+click, fill, type, screenshot).
+
+This is the **same engine** Workser's cloud Computer Use agent uses when it controls a
+user's machine remotely — you're getting it locally, gated by the same safety policy.
+
+## Notes that matter
+
+- **Check \`tool list\` rather than assuming a capability exists.** This is a curated
+  subset, not full desktop automation.
+- **The safety policy applies.** Blocked paths (\`~/.ssh\` and friends), blocked
+  destructive commands, rate limits. Refusals are the policy working, not a bug to
+  route around.
+- **Sensitive actions are approval-gated.** Writing or deleting files, running a shell
+  command, clicking or typing may return \`awaiting_approval\` (exit 5) — tell the user
+  to approve in Orbit, then retry.
+- **You already have your own tools.** For editing files in this repo, use them. Reach
+  for \`workser tool\` when you need something *outside* the project — the screen, the
+  clipboard, a browser, another app on the machine.
+`,
+  },
+  {
+    topic: "database",
+    title: "Database & end users",
+    summary: "Provision Postgres, browse tables, run SQL, provision auth.",
+    commands: ["db","auth"],
+    source: "skills/workser/reference/database.md",
+    body: `# Database & end users
+
+The project's Postgres (Neon behind Workser) and its end-user auth. Provisioning is
+idempotent — running \`create\` twice is safe.
+
+\`\`\`
+workser db create                   # provision the Neon Postgres database (idempotent)
+workser db url                      # connection string (sensitive; least-privilege role)
+workser db list                     # database status
+workser db tables                   # list tables in the database
+workser db schema <table>           # a table's columns
+workser db data <table> [-n N] [--offset N]   # read rows
+workser db query "<sql>"            # run SQL (writes are approval-gated)
+
+workser auth enable                 # provision auth for the project (idempotent)
+workser auth status                 # is auth enabled? + Neon auth mode
+\`\`\`
+
+## Notes that matter
+
+- **\`db url\` is a credential.** Don't print it into the conversation, don't paste it
+  into a file the user will commit. The app gets it from its environment already.
+- **Writes are approval-gated.** A \`db query\` that mutates may return
+  \`awaiting_approval\` (exit 5). Ask the user to approve in Orbit, then retry.
+- **\`DROP\` / \`TRUNCATE\` are refused** by the safety policy. Change schema with a
+  migration in the app's own migration folder, not with a destructive one-off.
+- **The database is the project's, not the app's.** Sibling apps in the same project
+  share it. Don't assume a table is yours because you created it.
+
+## Reading rows vs. reading data at runtime
+
+\`db data\` / \`db query\` are for **you**, inspecting while you build. The app itself
+should read through \`@workser/app\` (\`workser.db\`, \`workser.business\`) — see the
+\`workser-sdk\` skill. An app that shells out to the CLI at request time is wrong.
+`,
+  },
+  {
+    topic: "deliverables",
+    title: "Deliverables & asking the user",
+    summary: "Record finished output on the task, and ask a blocking question.",
+    commands: ["artifact","ask"],
+    source: "skills/workser/reference/deliverables.md",
+    body: `# Deliverables & asking the user
+
+Two things that reach the user directly: what you produced, and what you need from
+them.
+
+\`\`\`
+workser artifact add <path> [--kind <k>] [-d <text>]  # record a finished deliverable
+workser artifact add --url <url> --kind app           # record a deployed app
+workser artifact run                                  # which task you're attached to
+
+workser ask "<question>" [--type <t>] [--option <o>]  # ask the user, WAIT for the answer
+\`\`\`
+
+## Record what you produced
+
+Workser shows the user a **Deliverables** list on the task. If you don't say what you
+made, it has to guess — it watches your file edits and treats any path it sees as a
+deliverable, so scratch files and half-finished drafts show up next to the real
+output, and things that aren't files at all (a folder of results, a deployed app)
+can't show up correctly.
+
+\`\`\`
+workser artifact add ./report.pdf -d "Q3 sales summary"
+workser artifact add ./exports --kind folder -d "generated CSVs"
+workser artifact add --url https://acme.workser.app --kind app -t "Storefront"
+\`\`\`
+
+Only register **finished** output the user should get — not temp files, not
+intermediate steps. \`--kind\` is inferred from the path when you omit it (directories
+are detected automatically); pass it explicitly for \`app\` / \`url\`.
+
+To publish an app: \`workser deploy\` (preview) or \`workser deploy --prod\` (live), then
+register the URL it returns as an \`app\` artifact so the user can open it from the task.
+
+## Ask the user something (and get an answer back)
+
+When you're blocked — a missing value, an ambiguous requirement, permission for
+something consequential — don't guess, and don't just write the question into your
+final message where nobody will answer it.
+
+\`\`\`
+workser ask "Which email should order confirmations come from?"
+workser ask "Which plan should I wire up?" --option Free --option Pro --option Team
+workser ask "Delete the 1,240 archived rows?" --type approval
+\`\`\`
+
+This shows the user a real card in the conversation and **blocks until they answer**,
+then prints their answer — so you ask, read the reply, and keep working in the same
+turn.
+
+Types: \`input\` (default, free text), \`choice\` (with \`--option\`), \`approval\`
+(permission), \`confirmation\` (check an assumption), \`information\` (FYI, no answer
+needed). It times out (default 10 min) rather than hanging forever; if it does, carry
+on and state clearly what you assumed.
+
+**Never ask for a secret value this way** — the answer is stored and displayed. Ask
+*where* a key should go, then have the user set it (\`workser env set\` writes it
+without you ever seeing it).
+`,
+  },
+  {
+    topic: "deploy",
+    title: "Deploy, environment variables & logs",
+    summary: "Ship the app, configure it, and find out why it is down.",
+    commands: ["deploy","env","logs","versions","domain","open","verify"],
+    source: "skills/workser/reference/deploy.md",
+    body: `# Deploy, environment variables & logs
+
+Getting the app online and configured, and finding out why it isn't.
+
+\`\`\`
+workser deploy [--prod] [--watch]   # deploy (git → Vercel); --watch waits for live URL
+workser deploy status [id]          # status of a deploy (default: latest)
+workser logs [-n 100] [-f]          # recent logs
+workser versions                    # deploy history
+workser domain list                 # custom domains (read)
+workser open                        # open the live app
+workser verify                      # run typecheck/lint/build
+
+workser env set KEY=VALUE [K2=V2…]  # set env vars
+workser env list                    # list keys (values masked)
+workser env get KEY                 # one value (sensitive)
+\`\`\`
+
+## Notes that matter
+
+- **\`verify\` gates "done".** Run \`workser verify --json\` before you say a task is
+  finished. \`"ok": false\` means fix the listed errors and re-run — a green build is
+  the bar, not your reading of the diff.
+- **\`deploy\` without \`--prod\` is a preview.** Preview first when the change is
+  risky; \`--prod\` puts it in front of real users.
+- **\`--watch\` blocks until there's a live URL.** Without it you get a deploy id and
+  have to poll \`deploy status\`.
+- **\`env set\` writes a value you never see.** That's the point — when the user has
+  a secret, have them run it (or set it in Orbit) rather than pasting it to you.
+- **\`env get\` returns a secret.** Don't echo it into the conversation.
+- **\`env rm\` and \`domain set\` are owner-only** (exit 6). Tell the user to do it in
+  Orbit; don't look for a workaround.
+
+## After a successful deploy
+
+Register the URL so it shows up on the user's task:
+
+\`\`\`
+workser artifact add --url https://acme.workser.app --kind app -t "Storefront"
+\`\`\`
+
+See \`reference/deliverables.md\`.
+
+## Local vs cloud environment
+
+\`env set\` configures the **cloud** environment (production and preview). The \`.env\`
+files in the app folder configure **this computer** — the user edits those in Orbit
+under Settings → "On this computer", and saving there restarts the dev server. Don't
+hand-edit \`.env.local\` to change cloud behaviour; they are different environments.
+`,
+  },
+  {
+    topic: "images",
+    title: "Image generation",
+    summary: "Generate images from a prompt, optionally conditioned on existing images.",
+    commands: ["image"],
+    source: "skills/workser/reference/images.md",
+    body: `# Image generation
+
+\`\`\`
+workser image generate "<prompt>"            # alias: workser image gen
+  -r, --reference <url...>                   # condition on existing images (up to 4)
+  -o, --output <path>                        # also download the first image locally
+\`\`\`
+
+Returns the generated image's public URL, so the usual move is to generate, then use
+that URL directly in the app.
+
+\`\`\`bash
+workser image generate "flat illustration of a farm delivery van, brand colors" --json
+workser image gen "same van, from the side" -r https://… -o ./public/van.png --json
+\`\`\`
+
+## Notes that matter
+
+- **Reference images are image-to-image conditioning**, not attachments. Up to 4;
+  anything beyond that is dropped.
+- **The model sometimes narrates instead of drawing** — a refusal or a clarifying
+  question comes back as text rather than an image. Check that you actually got an
+  image before wiring the URL into a page; an empty result is not a transport error
+  to retry.
+- **\`--output\` writes only the first image.** If you asked for several, the rest
+  exist only as URLs.
+- **Placeholder art is not a deliverable.** Generating a hero image to unblock a
+  layout is fine; shipping it as the user's brand asset without asking is not.
+`,
+  },
+  {
+    topic: "memory",
+    title: "Memory across conversations",
+    summary: "Store and recall durable project knowledge shared with cloud agents.",
+    commands: ["memory"],
+    source: "skills/workser/reference/memory.md",
+    body: `# Memory — remember across conversations, not just this one
+
+\`\`\`
+workser memory add "<content>" [--metadata <json>]  # remember for future conversations
+workser memory search "<query>" [--limit N]         # recall what was learned before
+workser memory forget <memoryId>                    # soft-delete an outdated memory
+\`\`\`
+
+## Why this exists
+
+Every conversation you run is otherwise a fresh start — no memory of what you or the
+user decided last time. This stores durable, searchable memory for the **current
+project**, and it is the **same memory space** Workser's cloud agents write to for
+this project. Add something here and a cloud agent — or your own next conversation —
+can \`memory search\` and find it.
+
+## Using it well
+
+- **Search before assuming you don't know.** Before concluding something about this
+  project is undocumented, run \`workser memory search "<topic>"\`. It may already be
+  recorded.
+- **Store decisions, not chatter.** User preferences, decisions made, constraints,
+  requirements — things worth knowing next week. Not "the build passed".
+- **\`forget\` is a soft delete.** The content stays retrievable by id but is excluded
+  from future searches. Use it when something is wrong or outdated, rather than
+  adding a contradicting memory on top.
+- **Never store a secret.** Memory is retrievable and displayable.
+`,
+  },
+  {
+    topic: "neon",
+    title: "The project's own Neon backend",
+    summary: "Neon-branch object storage and functions. Dedicated tenancy only.",
+    commands: ["neon"],
+    source: "skills/workser/reference/neon-backend.md",
+    body: `# The project's own Neon backend
+
+S3-compatible object storage and Node.js HTTP functions on the project's own Neon
+branch — they branch with the database. **Additive** infrastructure, not a
+replacement for \`workser storage\`.
+
+\`\`\`
+workser neon status                       # tenancy + toggles + region verdict
+workser neon storage list | create <name> | rm <bucket>
+workser neon storage ls <bucket> [prefix]
+workser neon storage put <bucket> <local> [key]
+workser neon storage get <bucket> <key> [dest]
+workser neon storage url <bucket> <key>   # temporary download URL
+workser neon functions list | deploy <slug> <zip> | rm <slug>
+\`\`\`
+
+## Check \`neon status\` first — always
+
+Three things must all be true: **dedicated tenancy**, the capability **switched on**,
+and a **supported region**.
+
+Region is fixed when the project is created. \`regionSupportsNeonBackend: false\` is
+**final, not retryable** — no amount of waiting or retrying changes it. When you see
+it, say so plainly and fall back to \`workser storage\` (the default bucket).
+
+## Notes that matter
+
+- **\`neon storage rm <bucket>\` deletes the bucket and everything in it.** Not
+  reversible. Confirm with the user first.
+- **\`neon storage url\`** issues a short-lived URL — prefer it to moving large files
+  through Workser.
+- **Functions deploy from a zip.** Build the bundle first, then
+  \`workser neon functions deploy <slug> <zip>\`.
+- **Most apps don't need this.** If the user just wants to store uploads, the default
+  bucket in \`reference/storage.md\` is the answer.
+`,
+  },
+  {
+    topic: "roles",
+    title: "Delegate to roles",
+    summary: "Hand a focused subtask to another configured local agent.",
+    commands: ["agent"],
+    source: "skills/workser/reference/roles.md",
+    body: `# Delegate to roles
+
+The user can configure **roles** — named specialists each backed by a local CLI agent
+(e.g. \`qa\` → codex, \`designer\` → claude_code).
+
+\`\`\`
+workser agent list                  # main agent + configured roles (+ which are runnable)
+workser agent run <role> "<task>"   # delegate a focused subtask (runs isolated)
+workser agent main                  # show the configured main agent
+\`\`\`
+
+## How to use it
+
+Run \`workser agent list --json\` first — it tells you which roles exist **and** which
+are actually runnable on this machine. Delegating to a role that isn't installed just
+fails.
+
+\`workser agent run <role> "<task>" --json\` runs the role as an **isolated local
+subagent** with its own context and returns \`{role, agent, output, exitCode}\`.
+
+- Hand off focused subtasks — review this diff, design this screen — to keep your own
+  context lean and get a specialized second perspective.
+- **A non-zero \`exitCode\` means the role's run failed.** Surface that; don't quietly
+  treat empty output as success.
+- The subagent doesn't share your context. Put everything it needs in the task
+  string; it cannot see the conversation you're in.
+`,
+  },
+  {
+    topic: "storage",
+    title: "File storage",
+    summary: "The project's default bucket — upload, list, download.",
+    commands: ["storage"],
+    source: "skills/workser/reference/storage.md",
+    body: `# File storage
+
+The project's default bucket (Cloudflare R2 behind Workser). Every project gets one;
+\`create\` is idempotent.
+
+\`\`\`
+workser storage create [name]       # provision the bucket (idempotent)
+workser storage list                # the project's bucket
+workser storage ls [prefix]         # list objects in the bucket
+workser storage put <local> <key>   # upload a file into the bucket
+workser storage get <key> [dest]    # download an object (or print its URL)
+\`\`\`
+
+## Notes that matter
+
+- **One bucket per project, shared by its apps.** Namespace your keys by app or
+  feature (\`invoices/2026/…\`) rather than assuming the root is yours.
+- **\`storage get\` with no destination prints a URL** instead of writing a file —
+  useful when you just want to hand the user something to click.
+- **This is not where app uploads should go through you.** At runtime the app uses
+  \`workser.storage\` from \`@workser/app\`, and for anything large it should request a
+  presigned upload URL so the bytes never pass through Workser. See the
+  \`workser-sdk\` skill.
+
+## Not the same as \`workser neon storage\`
+
+\`storage\` is the default R2 bucket every project has. \`neon storage\` is additive
+infrastructure on the project's own Neon branch, available only on dedicated tenancy
+in a supported region. They are different stores — a file put in one is not visible
+in the other. See \`reference/neon-backend.md\`.
+`,
+  },
+];
