@@ -4,13 +4,18 @@ import { action } from "../run.js";
 import { api } from "../client.js";
 import { ok, line, warn } from "../output.js";
 
+/** Contract agent ids `agent spawn` accepts. */
+const SPAWNABLE_AGENTS = ["claude_code", "codex", "kimi", "opencode", "grok"];
+
 /**
- * `workser agent` — let the main agent delegate focused subtasks to the user's
- * configured roles (e.g. qa → codex, designer → claude_code). Each role runs as
- * an isolated local subagent (its own context), keeping the main agent lean.
+ * `workser agent` — let the main agent delegate focused subtasks either to the
+ * user's configured roles (e.g. qa → codex, designer → claude_code) or, via
+ * `spawn`, to an ad-hoc teammate on any connected agent CLI. Each subagent
+ * runs isolated (its own context/process), keeping the main agent lean.
  *
- *   GET  /v1/agents          -> { mainAgent, roles: (Role & {installed, authed})[] }
+ *   GET  /v1/agents          -> { mainAgent, roles: (Role & {installed, authed})[], detected }
  *   POST /v1/agents/run      { role, task } -> { role, agent, output, exitCode, durationMs }
+ *   POST /v1/agents/run      { role?, task, agent, model?, instructions?, effort? } (ad-hoc)
  */
 export function registerAgent(program: Command): void {
   const agent = program
@@ -38,9 +43,23 @@ export function registerAgent(program: Command): void {
             );
           }
           const roles = cfg?.roles ?? [];
-          if (!roles.length) return line(pc.dim("No subagents configured. Add them in the Workser Orbit Agents screen."));
-          line(pc.bold("subagents:"));
-          for (const r of roles) line("  " + formatRole(r));
+          if (!roles.length) {
+            line(pc.dim("No subagents configured. Add them in the Workser Orbit Agents screen."));
+          } else {
+            line(pc.bold("subagents:"));
+            for (const r of roles) line("  " + formatRole(r));
+          }
+          const detected = cfg?.detected ?? [];
+          const spawnable = detected.filter(
+            (d: any) => d?.installed && d?.authed !== false,
+          );
+          line(
+            pc.bold("spawnable (workser agent spawn <agent>):") +
+              " " +
+              (spawnable.length
+                ? spawnable.map((d: any) => toContractId(d.id)).join(", ")
+                : pc.dim("none connected")),
+          );
         });
       }),
     );
@@ -83,6 +102,48 @@ export function registerAgent(program: Command): void {
         if (exitCode !== 0) process.exitCode = exitCode;
       }),
     );
+
+  agent
+    .command("spawn <agent> <task...>")
+    .description(
+      `Spin up a TEMPORARY teammate on any connected agent CLI (not a saved role) for a one-off task. <agent>: ${SPAWNABLE_AGENTS.join("|")}`,
+    )
+    .option("--role <label>", "display label for this run (default: <agent>)")
+    .option(
+      "--instructions <text>",
+      "system prompt for this one run — this teammate's expertise/scope",
+    )
+    .option("--model <model>", "model override for the backing CLI")
+    .option("--effort <level>", "reasoning effort, where the backing CLI supports it")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const spawnAgent = args[0] as string;
+        const task = (args[1] as string[]).join(" ");
+        const res = await api(ctx, "/v1/agents/run", {
+          body: {
+            agent: spawnAgent,
+            task,
+            role: opts.role,
+            instructions: opts.instructions,
+            model: opts.model,
+            effort: opts.effort,
+          },
+        });
+        const exitCode = res?.exitCode ?? 0;
+        ok(res, () => {
+          if (res?.output) line(res.output);
+          if (exitCode !== 0) {
+            warn(`Spawned ${spawnAgent} exited with code ${exitCode}.`);
+          }
+        });
+        if (exitCode !== 0) process.exitCode = exitCode;
+      }),
+    );
+}
+
+/** Detector short id -> contract id, mirroring the daemon's `toRoleAgent`. */
+function toContractId(id: string): string {
+  return id === "claude" ? "claude_code" : id;
 }
 
 function formatRole(r: any): string {
