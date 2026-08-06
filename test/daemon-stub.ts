@@ -1,4 +1,9 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from "node:http";
 import { AddressInfo } from "node:net";
 
 /** A request the stub observed, captured for assertions in tests. */
@@ -11,6 +16,7 @@ export interface RecordedRequest {
   /** Parsed JSON body, or undefined if there was none. */
   body: unknown;
   authorization?: string;
+  runId?: string;
 }
 
 export type RouteHandler = (
@@ -83,7 +89,10 @@ export class DaemonStub {
     });
   }
 
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handle(
+    req: IncomingMessage,
+    res: ServerResponse,
+  ): Promise<void> {
     const chunks: Buffer[] = [];
     for await (const c of req) chunks.push(c as Buffer);
     const raw = Buffer.concat(chunks).toString("utf8");
@@ -98,6 +107,10 @@ export class DaemonStub {
       query,
       body: raw ? safeParse(raw) : undefined,
       authorization: req.headers.authorization,
+      runId:
+        typeof req.headers["x-workser-run-id"] === "string"
+          ? req.headers["x-workser-run-id"]
+          : undefined,
     };
     this.requests.push(recorded);
 
@@ -109,11 +122,17 @@ export class DaemonStub {
     }
     if (this.fault === "unauthorized") {
       this.fault = undefined;
-      return json(res, 401, { ok: false, error: { code: "unauthorized", message: "Bad token" } });
+      return json(res, 401, {
+        ok: false,
+        error: { code: "unauthorized", message: "Bad token" },
+      });
     }
     if (this.fault === "awaiting_approval") {
       this.fault = undefined;
-      return json(res, 423, { code: "awaiting_approval", message: "Approve in Orbit." });
+      return json(res, 423, {
+        code: "awaiting_approval",
+        message: "Approve in Orbit.",
+      });
     }
 
     const overrideKey = `${recorded.method} ${recorded.path}`;
@@ -143,17 +162,30 @@ export class DaemonStub {
     }
 
     const result = route(recorded, this.endpoint);
-    if (!result) return json(res, 404, { ok: false, error: { code: "not_found", message: recorded.path } });
+    if (!result)
+      return json(res, 404, {
+        ok: false,
+        error: { code: "not_found", message: recorded.path },
+      });
     return json(res, result.status ?? 200, result.body);
   }
 }
 
 /** Canned Contract A responses for every route the tested commands hit. */
-function route(req: RecordedRequest, endpoint: string): { status?: number; body?: unknown } | undefined {
+function route(
+  req: RecordedRequest,
+  endpoint: string,
+): { status?: number; body?: unknown } | undefined {
   const { method, path } = req;
 
   if (method === "GET" && path === "/v1/whoami") {
-    return { body: { id: "u_1", email: "khemmapich@gmail.com", workspace: { id: "w_1", name: "Acme", defaultProjectId: "p_1" } } };
+    return {
+      body: {
+        id: "u_1",
+        email: "khemmapich@gmail.com",
+        workspace: { id: "w_1", name: "Acme", defaultProjectId: "p_1" },
+      },
+    };
   }
 
   if (method === "GET" && path === "/v1/status") {
@@ -161,14 +193,27 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
       body: {
         user: { id: "u_1", email: "khemmapich@gmail.com" },
         workspace: { id: "w_1", name: "Acme" },
-        project: { id: req.query.project ?? "p_1", name: "demo", url: "https://demo.workser.app" },
-        latestDeploy: { id: "d_1", status: "ready", url: "https://demo.workser.app" },
+        project: {
+          id: req.query.project ?? "p_1",
+          name: "demo",
+          url: "https://demo.workser.app",
+        },
+        latestDeploy: {
+          id: "d_1",
+          status: "ready",
+          url: "https://demo.workser.app",
+        },
       },
     };
   }
 
   if (method === "GET" && path === "/v1/projects") {
-    return { body: [{ id: "p_1", name: "demo", url: "https://demo.workser.app" }, { id: "p_2", name: "blog" }] };
+    return {
+      body: [
+        { id: "p_1", name: "demo", url: "https://demo.workser.app" },
+        { id: "p_2", name: "blog" },
+      ],
+    };
   }
   if (method === "POST" && path === "/v1/projects") {
     const name = (req.body as any)?.name ?? "unnamed";
@@ -176,25 +221,54 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   }
   const projGet = path.match(/^\/v1\/projects\/([^/]+)$/);
   if (method === "GET" && projGet) {
-    return { body: { id: projGet[1], name: "demo", url: "https://demo.workser.app" } };
+    return {
+      body: { id: projGet[1], name: "demo", url: "https://demo.workser.app" },
+    };
   }
 
-  if (method === "POST" && /^\/v1\/projects\/[^/]+\/provision\/database$/.test(path)) {
-    return { body: { created: true, name: "demo-db", region: "us-east-1", status: "ready" } };
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/provision\/database$/.test(path)
+  ) {
+    return {
+      body: {
+        created: true,
+        name: "demo-db",
+        region: "us-east-1",
+        status: "ready",
+      },
+    };
   }
-  if (method === "POST" && /^\/v1\/projects\/[^/]+\/provision\/auth$/.test(path)) {
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/provision\/auth$/.test(path)
+  ) {
     return { body: { created: true, enabled: true, providers: ["email"] } };
   }
-  if (method === "POST" && /^\/v1\/projects\/[^/]+\/provision\/storage$/.test(path)) {
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/provision\/storage$/.test(path)
+  ) {
     const name = (req.body as any)?.name ?? "demo-bucket";
     return { body: { created: true, bucket: name } };
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/databases$/.test(path)) {
-    return { body: [{ name: "demo-db", region: "us-east-1", status: "ready" }] };
+    return {
+      body: [{ name: "demo-db", region: "us-east-1", status: "ready" }],
+    };
   }
-  if (method === "GET" && /^\/v1\/projects\/[^/]+\/databases\/connection-string$/.test(path)) {
-    return { body: { connection_string: "postgres://u:p@host/db", role: "workser_app_x", scoped: true } };
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/databases\/connection-string$/.test(path)
+  ) {
+    return {
+      body: {
+        connection_string: "postgres://u:p@host/db",
+        role: "workser_app_x",
+        scoped: true,
+      },
+    };
   }
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/auth$/.test(path)) {
     return {
@@ -210,7 +284,10 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/storage$/.test(path)) {
     return { body: [{ bucket: "demo-bucket" }] };
   }
-  if (method === "GET" && /^\/v1\/projects\/[^/]+\/storage\/files$/.test(path)) {
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/storage\/files$/.test(path)
+  ) {
     const prefix = req.query.prefix ?? "";
     const obj = (key: string, size: number, when: string) => ({
       key,
@@ -225,31 +302,64 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
     ];
     return { body: prefix ? all.filter((o) => o.key.startsWith(prefix)) : all };
   }
-  if (method === "POST" && /^\/v1\/projects\/[^/]+\/storage\/upload-base64$/.test(path)) {
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/storage\/upload-base64$/.test(path)
+  ) {
     const b = req.body as any;
-    const key = b?.folder ? `${b.folder}/${b.filename}` : b?.filename ?? "file";
-    return { body: { url: `${endpoint}/_obj/${encodeURIComponent(key)}`, key } };
+    const key = b?.folder
+      ? `${b.folder}/${b.filename}`
+      : (b?.filename ?? "file");
+    return {
+      body: { url: `${endpoint}/_obj/${encodeURIComponent(key)}`, key },
+    };
   }
 
   // Neon Postgres browser (Orbit cloud controller).
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/db\/tables$/.test(path)) {
     return {
       body: [
-        { table_name: "users", table_schema: "public", table_size: 8192, column_count: 4, row_count: 3 },
-        { table_name: "posts", table_schema: "public", table_size: 4096, column_count: 3, row_count: 7 },
+        {
+          table_name: "users",
+          table_schema: "public",
+          table_size: 8192,
+          column_count: 4,
+          row_count: 3,
+        },
+        {
+          table_name: "posts",
+          table_schema: "public",
+          table_size: 4096,
+          column_count: 3,
+          row_count: 7,
+        },
       ],
     };
   }
-  const dbSchema = path.match(/^\/v1\/projects\/[^/]+\/db\/tables\/([^/]+)\/schema$/);
+  const dbSchema = path.match(
+    /^\/v1\/projects\/[^/]+\/db\/tables\/([^/]+)\/schema$/,
+  );
   if (method === "GET" && dbSchema) {
     return {
       body: [
-        { column_name: "id", data_type: "uuid", is_nullable: "NO", column_default: "gen_random_uuid()" },
-        { column_name: "email", data_type: "text", is_nullable: "NO", column_default: null },
+        {
+          column_name: "id",
+          data_type: "uuid",
+          is_nullable: "NO",
+          column_default: "gen_random_uuid()",
+        },
+        {
+          column_name: "email",
+          data_type: "text",
+          is_nullable: "NO",
+          column_default: null,
+        },
       ],
     };
   }
-  const dbData = path.match(/^\/v1\/projects\/[^/]+\/db\/tables\/([^/]+)\/data$/);
+  const dbData = path.match(
+    /^\/v1\/projects\/[^/]+\/db\/tables\/([^/]+)\/data$/,
+  );
   if (method === "GET" && dbData) {
     const limit = Number(req.query.limit ?? 100);
     const offset = Number(req.query.offset ?? 0);
@@ -270,7 +380,12 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/env$/.test(path)) {
-    return { body: [{ key: "API_KEY", masked: "sk-•••" }, { key: "NODE_ENV", masked: "pr•" }] };
+    return {
+      body: [
+        { key: "API_KEY", masked: "sk-•••" },
+        { key: "NODE_ENV", masked: "pr•" },
+      ],
+    };
   }
   if (method === "POST" && /^\/v1\/projects\/[^/]+\/env$/.test(path)) {
     const vars = (req.body as any)?.vars ?? [];
@@ -278,7 +393,9 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   }
   const envKey = path.match(/^\/v1\/projects\/[^/]+\/env\/([^/]+)$/);
   if (method === "GET" && envKey) {
-    return { body: { key: decodeURIComponent(envKey[1]), value: "secret-value" } };
+    return {
+      body: { key: decodeURIComponent(envKey[1]), value: "secret-value" },
+    };
   }
   if (method === "DELETE" && envKey) {
     return { body: { removed: true } };
@@ -287,12 +404,19 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   if (method === "POST" && /^\/v1\/projects\/[^/]+\/deploy$/.test(path)) {
     return { body: { id: "d_new", status: "building", url: undefined } };
   }
-  if (method === "GET" && /^\/v1\/projects\/[^/]+\/deployments\/latest$/.test(path)) {
-    return { body: { id: "d_1", status: "ready", url: "https://demo.workser.app" } };
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/deployments\/latest$/.test(path)
+  ) {
+    return {
+      body: { id: "d_1", status: "ready", url: "https://demo.workser.app" },
+    };
   }
   const depGet = path.match(/^\/v1\/deployments\/([^/]+)$/);
   if (method === "GET" && depGet) {
-    return { body: { id: depGet[1], status: "ready", url: "https://demo.workser.app" } };
+    return {
+      body: { id: depGet[1], status: "ready", url: "https://demo.workser.app" },
+    };
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/versions$/.test(path)) {
@@ -318,12 +442,22 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/logs$/.test(path)) {
-    return { body: { entries: [{ ts: "t0", level: "info", message: "hello" }], cursor: "c1" } };
+    return {
+      body: {
+        entries: [{ ts: "t0", level: "info", message: "hello" }],
+        cursor: "c1",
+      },
+    };
   }
 
   if (method === "POST" && /^\/v1\/projects\/[^/]+\/domains$/.test(path)) {
     const domain = (req.body as any)?.domain ?? "example.com";
-    return { body: { domain, dns: [{ type: "CNAME", name: domain, value: "cname.workser.app" }] } };
+    return {
+      body: {
+        domain,
+        dns: [{ type: "CNAME", name: domain, value: "cname.workser.app" }],
+      },
+    };
   }
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/domains$/.test(path)) {
     return { body: [{ domain: "example.com", status: "active" }] };
@@ -336,8 +470,24 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
         backupAgent: "codex",
         effectiveMainAgent: "claude_code",
         roles: [
-          { id: "r_qa", role: "qa", agent: "codex", enabled: true, installed: true, authed: true, mcp: [{ id: "m1", name: "fs", transport: "stdio" }] },
-          { id: "r_designer", role: "designer", agent: "claude_code", enabled: true, installed: true, authed: true, apps: ["figma"] },
+          {
+            id: "r_qa",
+            role: "qa",
+            agent: "codex",
+            enabled: true,
+            installed: true,
+            authed: true,
+            mcp: [{ id: "m1", name: "fs", transport: "stdio" }],
+          },
+          {
+            id: "r_designer",
+            role: "designer",
+            agent: "claude_code",
+            enabled: true,
+            installed: true,
+            authed: true,
+            apps: ["figma"],
+          },
         ],
       },
     };
@@ -345,7 +495,15 @@ function route(req: RecordedRequest, endpoint: string): { status?: number; body?
   if (method === "POST" && path === "/v1/agents/run") {
     const role = (req.body as any)?.role ?? "qa";
     const agent = role === "designer" ? "claude_code" : "codex";
-    return { body: { role, agent, output: `ran ${role} on the task`, exitCode: 0, durationMs: 42 } };
+    return {
+      body: {
+        role,
+        agent,
+        output: `ran ${role} on the task`,
+        exitCode: 0,
+        durationMs: 42,
+      },
+    };
   }
 
   return undefined;

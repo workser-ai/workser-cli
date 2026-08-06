@@ -35,6 +35,7 @@ export function runCli(
     WORKSER_API_URL: undefined,
     WORKSER_DAEMON_URL: undefined,
     WORKSER_TOKEN: undefined,
+    WORKSER_ENV: undefined,
     NO_COLOR: "1",
     ...(opts.home ? { HOME: opts.home, USERPROFILE: opts.home } : {}),
     ...opts.env,
