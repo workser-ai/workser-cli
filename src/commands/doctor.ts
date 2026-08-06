@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { readProjectLink, readSession } from "../config.js";
+import { ENV_BASE_URLS, resolveEnv } from "../env.js";
 import { ok, line } from "../output.js";
 
 /**
@@ -18,6 +19,18 @@ export function registerDoctor(program: Command): void {
       action(({ ctx, opts }) => {
         const session = readSession();
         const link = readProjectLink(ctx.cwd);
+        // Which backend this shell targets. Worth printing even in daemon mode:
+        // it is what a cloud call would hit, and a surprising value here is the
+        // usual explanation for "why is my data not in the dashboard I'm on?".
+        const env = resolveEnv();
+        // `session.endpoint` outranks $WORKSER_ENV on purpose — the saved token
+        // belongs to the endpoint it was minted against, so honouring the env
+        // var here would just 401. But someone who exported WORKSER_ENV=dev and
+        // is still talking to prod deserves to be told why, not left guessing.
+        const envIgnored =
+          Boolean(process.env.WORKSER_ENV) &&
+          ctx.mode === "cloud" &&
+          ctx.endpoint !== ENV_BASE_URLS[env];
 
         const tokenSource = opts.token
           ? "--token"
@@ -33,7 +46,9 @@ export function registerDoctor(program: Command): void {
             ? "$WORKSER_DAEMON_URL"
             : session.endpoint
               ? "session"
-              : "cloud-default";
+              : process.env.WORKSER_API_URL
+                ? "$WORKSER_API_URL"
+                : `cloud-default: ${env}`;
 
         const projectSource = opts.project
           ? "--project"
@@ -46,6 +61,8 @@ export function registerDoctor(program: Command): void {
         const report = {
           endpoint: ctx.endpoint,
           endpointSource,
+          env,
+          envIgnored,
           mode: ctx.mode,
           token: {
             present: Boolean(ctx.token),
@@ -64,6 +81,10 @@ export function registerDoctor(program: Command): void {
         ok(report, () => {
           line(pc.bold("workser doctor"));
           line(`  endpoint:  ${ctx.endpoint} ${pc.dim(`(${endpointSource})`)}`);
+          line(
+            `  env:       ${env === "prod" ? pc.yellow(env) : env}` +
+              pc.dim(process.env.WORKSER_ENV ? "  ($WORKSER_ENV)" : "  (default)"),
+          );
           line(`  mode:      ${ctx.mode}`);
           line(
             `  token:     ${
@@ -78,6 +99,20 @@ export function registerDoctor(program: Command): void {
               (projectSource ? pc.dim(`  [${projectSource}]`) : ""),
           );
           line(`  cwd:       ${ctx.cwd}`);
+          if (envIgnored) {
+            line("");
+            line(
+              pc.yellow(
+                `  WORKSER_ENV=${env} is not in effect — ${endpointSource} wins.`,
+              ),
+            );
+            line(
+              pc.dim(
+                `  Re-run \`workser login\` to switch (the saved token is tied to ${ctx.endpoint}),`,
+              ),
+            );
+            line(pc.dim(`  or pass --endpoint ${ENV_BASE_URLS[env]}.`));
+          }
         });
       }),
     );

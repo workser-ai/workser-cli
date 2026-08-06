@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { readSession, readProjectLink } from "./config.js";
+import { cloudBaseUrl } from "./env.js";
 import { WorkserError } from "./errors.js";
 
 export interface GlobalOpts {
@@ -41,13 +42,14 @@ export interface Context {
   runId?: string;
 }
 
-const CLOUD_DEFAULT = process.env.WORKSER_API_URL || "https://api.workser.ai";
-
 /**
  * Resolve where + how to talk to Workser, in precedence order:
  *   endpoint:  --endpoint  >  $WORKSER_DAEMON_URL  >  session.endpoint  >  cloud default
  *   token:     --token     >  $WORKSER_TOKEN       >  session.token
  *   project:   --project   >  <cwd>/.workser link  >  session.defaultProjectId
+ *
+ * The cloud default is itself environment-aware — `$WORKSER_API_URL`, else the
+ * URL for `$WORKSER_ENV` (local | dev | prod), else production. See env.ts.
  *
  * Inside Workser Orbit, the app writes the session pointing at the local daemon,
  * so the agent's `workser …` calls flow through the cockpit (auth + approvals + live UI).
@@ -77,7 +79,7 @@ export function buildContext(opts: GlobalOpts): Context {
     : opts.endpoint ||
       process.env.WORKSER_DAEMON_URL ||
       session.endpoint ||
-      CLOUD_DEFAULT;
+      cloudBaseUrl();
   const endpoint = endpointRaw.replace(/\/+$/, "");
 
   const mode: Context["mode"] = socketPath

@@ -75,15 +75,30 @@ platform plans in `workser-agents-platform/`.
 | Resolves | Precedence |
 |---|---|
 | **endpoint** | `--endpoint` → `$WORKSER_DAEMON_URL` → `~/.workser/session.json` → cloud default |
+| **cloud default** | `$WORKSER_API_URL` → `$WORKSER_ENV` → `prod` |
 | **token** | `--token` → `$WORKSER_TOKEN` → session file |
 | **project** | `--project` → `<cwd>/.workser/project.json` → session default |
+
+`$WORKSER_ENV` names a backend rather than a URL:
+
+| `WORKSER_ENV` | Base URL |
+|---|---|
+| unset / `prod` | `https://api.workser.ai` |
+| `dev` | `https://dev-api.workser.ai` |
+| `local` | `http://localhost:8000` (a core-api you run yourself) |
+
+An unrecognised value is a hard error, not a silent fall-back to prod. Run
+`workser doctor` to see the resolved env, endpoint, and which of the two it
+came from.
 
 - **Inside Workser Orbit (primary):** the app writes `~/.workser/session.json`
   pointing at its **local daemon** (`http://127.0.0.1:<port>`). Calls flow through
   the cockpit, which handles **auth (bridge JWT), approval gates, and live progress
   in the UI**. This is how the user *sees* what the agent does.
 - **Standalone / CI:** `workser login --token <t>` saves a session against the
-  **cloud API** (`https://api.workser.ai`). Same commands, no desktop app.
+  **cloud API** for the current `$WORKSER_ENV`. Same commands, no desktop app.
+  Note the session file records the endpoint it logged in against, so switching
+  `$WORKSER_ENV` afterwards needs a fresh `workser login` (or `--endpoint`).
 
 Both speak the same `/v1/...` contract (see `src/client.ts`).
 
