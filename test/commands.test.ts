@@ -685,3 +685,133 @@ describe("doctor", () => {
     expect(r.json.data.project.id).toBe("p_1");
   });
 });
+
+/**
+ * The SDLC surfaces — Board, Docs, project Memory, brand.
+ *
+ * These shipped create-only, and the cost was a cockpit that lied: a Board
+ * still reading 0/0/0/0 after the feature was built and published, and
+ * decisions written to a log nothing ever read back. The reads and the status
+ * transitions are what make those panels reflect reality, so they are what
+ * these tests pin down.
+ */
+describe("SDLC surfaces", () => {
+  it("board list → GET the work items, filterable by status", async () => {
+    const all = await cli(["board", "list", "--project", "p_1"]);
+    expect(all.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("GET");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/work-items");
+    expect(all.json.data).toHaveLength(2);
+
+    // The daemon's list route takes no filter params, so --status narrows
+    // client-side. Assert the narrowing, not just that the call happened.
+    const done = await cli(["board", "list", "--status", "done", "--project", "p_1"]);
+    expect(done.json.data).toHaveLength(1);
+    expect(done.json.data[0].id).toBe("wi_2");
+
+    const labelled = await cli(["board", "list", "--label", "bug", "--project", "p_1"]);
+    expect(labelled.json.data.map((r: { id: string }) => r.id)).toEqual(["wi_1"]);
+  });
+
+  it("board move / close → PATCH the card's status", async () => {
+    const moved = await cli(["board", "move", "wi_1", "in-progress", "--project", "p_1"]);
+    expect(moved.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("PATCH");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/work-items/wi_1");
+    expect(stub.lastRequest!.body).toEqual({ status: "in-progress" });
+
+    const closed = await cli(["board", "close", "wi_1", "--project", "p_1"]);
+    expect(closed.code).toBe(0);
+    expect(stub.lastRequest!.body).toEqual({ status: "done" });
+    expect(closed.json.data.status).toBe("done");
+  });
+
+  it("board rejects an unknown status before calling the daemon", async () => {
+    const r = await cli(["board", "move", "wi_1", "shipped", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.ok).toBe(false);
+    expect(r.json.error.message).toContain("backlog");
+    // A bad status must not reach the network at all.
+    expect(stub.requests.filter((q) => q.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("board update sends only the fields it was given", async () => {
+    const r = await cli([
+      "board", "update", "wi_1", "--priority", "urgent", "--label", "auth", "--project", "p_1",
+    ]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.body).toEqual({ priority: "urgent", labels: ["auth"] });
+  });
+
+  it("board update with no fields fails instead of sending an empty PATCH", async () => {
+    const r = await cli(["board", "update", "wi_1", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.message).toContain("Nothing to update");
+    expect(stub.requests.filter((q) => q.method === "PATCH")).toHaveLength(0);
+  });
+
+  it("decision list / show → the read side of project memory", async () => {
+    const list = await cli(["decision", "list", "--project", "p_1"]);
+    expect(list.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/architecture-decisions");
+    expect(list.json.data[0].title).toBe("Use Postgres");
+
+    const show = await cli(["decision", "show", "dec_1", "--project", "p_1"]);
+    expect(show.code).toBe(0);
+    expect(show.json.data.consequences).toContain("provision");
+  });
+
+  it("requirement update → PATCH, the one memory entity that legitimately moves", async () => {
+    const r = await cli(["requirement", "update", "req_1", "--status", "done", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("PATCH");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/requirements/req_1");
+    expect(stub.lastRequest!.body).toEqual({ status: "done" });
+  });
+
+  it("doc list / update → revise the page that exists", async () => {
+    const list = await cli(["doc", "list", "--project", "p_1"]);
+    expect(list.code).toBe(0);
+    expect(list.json.data[0].filePath).toBe(".workser/docs/doc_1.md");
+
+    const linked = await cli(["doc", "list", "--work-item", "wi_1", "--project", "p_1"]);
+    expect(stub.lastRequest!.query.workItemId).toBe("wi_1");
+    expect(linked.json.data).toHaveLength(1);
+
+    const updated = await cli([
+      "doc", "update", "doc_1", "--markdown", "# New body", "--project", "p_1",
+    ]);
+    expect(updated.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("PATCH");
+    expect(stub.lastRequest!.body).toEqual({ markdown: "# New body" });
+  });
+
+  it("doc show --markdown reports the mirror path to read", async () => {
+    const r = await cli(["doc", "show", "doc_1", "--markdown", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    expect(r.json.data.filePath).toBe(".workser/docs/doc_1.md");
+  });
+
+  it("design show → flattens the brand tokens for the agent", async () => {
+    const r = await cli(["design", "show", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("GET");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/design/files");
+    // The DTCG `$value` wrapper is unwrapped here, not by every caller.
+    expect(r.json.data).toMatchObject({
+      hasBrand: true,
+      colors: { primary: "#1f7a4d" },
+      fonts: { heading: "Inter" },
+      brand: { name: "Green Grocer" },
+    });
+  });
+
+  it("design show reports no brand rather than failing", async () => {
+    // Most projects have no brand; the agent's instruction for that case is
+    // "choose sensible styling", which depends on this being a success.
+    stub.overrides.set("GET /v1/projects/p_1/design/files", { body: { files: [] } });
+    const r = await cli(["design", "show", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    expect(r.json.data.hasBrand).toBe(false);
+  });
+});

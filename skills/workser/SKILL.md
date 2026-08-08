@@ -21,6 +21,8 @@ command. Don't print them all; you are paying for every line you load.
 
 | You need to… | Commands | Run |
 | --- | --- | --- |
+| See what's tracked, decided, or written down for this project | `board …`, `decision …`, `requirement …`, `doc …` | `workser help sdlc-entities` |
+| Follow the project's brand — colours, fonts, logo | `design …` | `workser help brand` |
 | Provision or query Postgres; list end users | `db …`, `auth …` | `workser help database` |
 | Deploy, set env vars, read logs, check a domain | `deploy`, `env …`, `logs`, `versions`, `domain`, `open` | `workser help deploy` |
 | Put files in the project's bucket | `storage …` | `workser help storage` |
@@ -73,6 +75,11 @@ Owner-only, for reference: `project create` · `project use` · `env rm` · `dom
    `{"ok":true,"data":...}` or `{"ok":false,"error":{"code","message",...}}`. Parse it.
 2. **Orient first.** Run `workser status --json` to see the connection, the pinned
    project, and the latest deploy before acting. You don't pick or switch projects.
+   For anything beyond a trivial edit, also read what the project already knows:
+   `workser board list --json` (what's tracked), `workser decision list --json`
+   (what was already decided, so you don't quietly reverse it), and
+   `workser design show --json` before writing UI. This project outlives your
+   session; that context is how you don't start from zero.
 3. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
    reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
    user, then continue. Provisioning the *pinned project's own* db / bucket / auth is
@@ -93,10 +100,15 @@ Owner-only, for reference: `project create` · `project use` · `env rm` · `dom
 
 ```bash
 workser status --json                       # 1. orient (project is already pinned)
-workser db create --json                    # 2. provision infra the app needs (idempotent)
-workser env set STRIPE_KEY=sk_live_… --json # 3. configure it
+workser board list --json                   # 2. what's already tracked
+workser decision list --json                #    …and already decided
+workser board move <id> in-progress --json  # 3. claim the card you're doing
+workser db create --json                    # 4. provision infra the app needs (idempotent)
+workser env set STRIPE_KEY=sk_live_… --json # 5. configure it
 # … you write the app code with your normal tools …
-workser deploy --prod --watch --json        # 4. ship; returns the live URL
+workser verify --json                       # 6. green build is the bar for "done"
+workser deploy --prod --watch --json        # 7. ship; returns the live URL
+workser board close <id> --json             # 8. the Board now matches reality
 ```
 
 Provisioning the pinned project's own database / bucket / auth is yours to do

@@ -28,6 +28,10 @@ import { registerArtifact } from "./commands/artifact.js";
 import { registerImage } from "./commands/image.js";
 import { registerAsk } from "./commands/ask.js";
 import { registerSearch } from "./commands/search.js";
+import { registerBoard } from "./commands/board.js";
+import { registerDecision } from "./commands/decision.js";
+import { registerDoc } from "./commands/doc.js";
+import { registerDesign } from "./commands/design.js";
 
 // Version is inlined at build time (see `define` in tsup.config.ts) so the
 // single self-contained dist/index.js needs no sibling package.json at runtime.
@@ -93,5 +97,9 @@ registerArtifact(program);
 registerImage(program);
 registerAsk(program);
 registerSearch(program);
+registerBoard(program);
+registerDecision(program);
+registerDoc(program);
+registerDesign(program);
 
 program.parseAsync(process.argv).catch((e) => fail(e));

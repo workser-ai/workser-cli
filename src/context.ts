@@ -40,6 +40,14 @@ export interface Context {
    * say so rather than guessing.
    */
   runId?: string;
+  /**
+   * The conversation the current run reports into, if any.
+   *
+   * Orbit sets `WORKSER_CONVERSATION_ID` on the agent process alongside
+   * `WORKSER_RUN_ID` (see that field's doc comment) — same absence rule: not
+   * set when the CLI runs by hand or from CI.
+   */
+  conversationId?: string;
 }
 
 /**
@@ -98,8 +106,9 @@ export function buildContext(opts: GlobalOpts): Context {
     session.defaultProjectId;
 
   const runId = process.env.WORKSER_RUN_ID || undefined;
+  const conversationId = process.env.WORKSER_CONVERSATION_ID || undefined;
 
-  return { endpoint, socketPath, token, mode, cwd, projectId, runId };
+  return { endpoint, socketPath, token, mode, cwd, projectId, runId, conversationId };
 }
 
 /**

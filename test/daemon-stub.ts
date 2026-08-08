@@ -506,8 +506,124 @@ function route(
     };
   }
 
+  // --- SDLC surfaces: Board, Docs, project Memory, brand ----------------
+  //
+  // The daemon scopes all of these to the pinned project, so the stub keys off
+  // the resource segment rather than the project id.
+  const sdlc = /^\/v1\/projects\/[^/]+\/(work-items|documents|architecture-decisions|requirements)(?:\/([^/]+))?$/.exec(
+    path,
+  );
+  if (sdlc) {
+    const [, resource, id] = sdlc;
+    if (method === "GET" && !id) {
+      if (resource === "work-items") {
+        return {
+          body: [
+            { ...WORK_ITEM, id: "wi_1", status: "backlog", labels: ["bug"] },
+            { ...WORK_ITEM, id: "wi_2", title: "Ship the board", status: "done", labels: [] },
+          ],
+        };
+      }
+      if (resource === "documents") {
+        // `?workItemId=` narrows to the single linked document, matching
+        // `routes/documents.ts` (which returns a 0- or 1-element array).
+        return req.query.workItemId
+          ? { body: [{ ...DOCUMENT, id: "doc_2", workItemId: req.query.workItemId }] }
+          : { body: [DOCUMENT] };
+      }
+      if (resource === "architecture-decisions") return { body: [DECISION] };
+      return { body: [REQUIREMENT, { ...REQUIREMENT, id: "req_2", status: "done" }] };
+    }
+    if (method === "GET" && id) {
+      if (resource === "work-items") return { body: { ...WORK_ITEM, id } };
+      if (resource === "documents") return { body: { ...DOCUMENT, id } };
+      if (resource === "architecture-decisions") return { body: { ...DECISION, id } };
+      return { body: { ...REQUIREMENT, id } };
+    }
+    if (method === "POST" && !id) {
+      const sent = (req.body ?? {}) as Record<string, unknown>;
+      return { status: 201, body: { id: `${resource}_new`, ...sent } };
+    }
+    if (method === "PATCH" && id) {
+      const base =
+        resource === "work-items"
+          ? WORK_ITEM
+          : resource === "documents"
+            ? DOCUMENT
+            : resource === "architecture-decisions"
+              ? DECISION
+              : REQUIREMENT;
+      return { body: { ...base, id, ...((req.body ?? {}) as object) } };
+    }
+  }
+
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/design\/files$/.test(path)) {
+    return {
+      body: {
+        files: [
+          {
+            path: "design/tokens.json",
+            contents: JSON.stringify({
+              color: { primary: { $value: "#1f7a4d", $type: "color" } },
+              font: { heading: { $value: "Inter", $type: "fontFamily" } },
+              brand: { name: "Green Grocer" },
+            }),
+          },
+          { path: "design/tokens.css", contents: ":root{--ws-color-primary:#1f7a4d}" },
+        ],
+      },
+    };
+  }
+
   return undefined;
 }
+
+const WORK_ITEM = {
+  id: "wi_1",
+  projectId: "p_1",
+  title: "Fix the login bug",
+  description: null,
+  status: "backlog",
+  priority: "normal",
+  labels: [] as string[],
+  ownerHuman: null,
+  milestoneId: null,
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+const DOCUMENT = {
+  id: "doc_1",
+  projectId: "p_1",
+  workItemId: null,
+  title: "Onboarding",
+  contentJson: "[]",
+  filePath: ".workser/docs/doc_1.md",
+  createdAt: "2026-08-01T00:00:00.000Z",
+  updatedAt: "2026-08-01T00:00:00.000Z",
+};
+
+const DECISION = {
+  id: "dec_1",
+  projectId: "p_1",
+  title: "Use Postgres",
+  context: "We needed relational queries.",
+  decision: "Adopt Neon Postgres.",
+  consequences: "One more service to provision.",
+  status: "accepted",
+  filePath: ".workser/memory/decisions/dec_1.md",
+  createdAt: "2026-08-01T00:00:00.000Z",
+};
+
+const REQUIREMENT = {
+  id: "req_1",
+  projectId: "p_1",
+  title: "Support SSO",
+  body: "Enterprise customers need SAML.",
+  status: "draft",
+  filePath: ".workser/memory/requirements/req_1.md",
+  createdAt: "2026-08-01T00:00:00.000Z",
+};
 
 function json(res: ServerResponse, status: number, body: unknown): void {
   const text = body === undefined ? "" : JSON.stringify(body);
