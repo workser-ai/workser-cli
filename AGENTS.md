@@ -42,6 +42,7 @@ what you *can* do.
 workser status | whoami                       # orient (read)
 workser project show | list                   # your pinned project + the workspace
 workser env set KEY=VALUE… | list | get KEY   # env vars
+workser env pull [--out .env.local]           # write cloud env vars into a local file
 workser db create                             # provision the Neon Postgres database
 workser db url | list                         # DB connection string + status
 workser db tables                             # list tables in the database
@@ -91,6 +92,33 @@ workser ask "<question>" [--type <t>] [--option <o>] # ask the user, WAIT for th
 # owner-only (will return owner_only / exit 6 — ask the user to do these in Orbit):
 #   project create, project use, env rm, domain set
 ```
+
+## Project tracking (the Board, Docs and Memory the user sees in Orbit)
+```
+workser board list | show <id>                       # what's already tracked
+workser board create "<title>" [--description <t>] [--status <s>] [--priority <p>]
+workser board move <id> <backlog|in-progress|in-review|done> | close <id>
+workser decision list | show <id>                    # what was already decided
+workser decision create "<title>" --context <t> --decision <t> [--consequences <t>]
+workser requirement list | show <id> | create "<title>" --body <t> | update <id> --status <s>
+workser doc list | show <id> [--markdown]
+workser doc create "<title>" --markdown <text> | doc update <id> --markdown <text>
+```
+**Read before you plan** — `board list` and `decision list` tell you what someone is
+already doing and what this project chose on purpose, so you don't re-file work or
+quietly reverse a decision.
+
+**A plan with phases goes on the Board before you build it.** The moment you split a
+task into more than one phase: one `board create` card per phase (only the one you're
+doing goes to `in-progress`), the plan itself as one `doc create --markdown` — with
+**no `--work-item`**, because a linked doc is shown on its card and hidden from the
+Docs panel — and a `decision create` if the plan settled a real tradeoff. A plan that
+lives only in your reply is gone as soon as the conversation scrolls.
+
+**Keep it true as you work.** `board move <id> in-progress` when you pick it up,
+`in-review` when it's ready to look at, `board close <id>` when it's done and
+verified. A Board still reading `backlog` after you shipped is worse than no Board.
+Decisions are append-only: supersede an old one with a new record, never edit it.
 
 ## Memory (remember across conversations, not just this one)
 Every conversation you run is otherwise a fresh start — no memory of what you or the
@@ -205,8 +233,12 @@ keep your own context lean and get a specialized second perspective; a non-zero
 ## Example
 ```bash
 workser status --json                  # orient: which project, last deploy
+workser board list --json              # what's tracked; decision list for what's decided
+workser board create "Phase 1 — …" --status in-progress --json   # phased plan -> cards
+workser doc create "Plan" --markdown "…" --json                  # …plus the plan doc
 workser env set STRIPE_KEY=sk_live_… --json
 # … you write the app code with your normal tools …
 workser deploy --prod --watch --json   # -> .data.url is the live URL
+workser board close <id> --json        # the Board now matches reality
 ```
 Report results to the user in plain language, not raw JSON.

@@ -35,10 +35,9 @@ command. Don't print them all; you are paying for every line you load.
 | Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
 
-`workser help` with no topic lists them. **The CLI is the source of truth**: it ships
-these guides with itself, so they match the version you are running. For exact flags
-on any command, `workser <command> --help` is generated from the implementation and
-cannot be out of date.
+`workser help` with no topic lists them. **The CLI is the source of truth** — it
+ships these guides itself, so they match the version you are running, and
+`workser <command> --help` is generated from the implementation.
 
 ## Orientation (no guide needed)
 
@@ -61,13 +60,11 @@ SQL, provision the bucket + auth, deploy, set env vars, manage files. Sensitive
 actions are **gated** — the daemon may return `error.code = "awaiting_approval"`
 (exit 5) and wait for the user to approve in Orbit; ask them to approve, then retry.
 
-What you **cannot** do is administer the project set or destroy config: creating or
-switching which project is pinned, deleting env vars, or attaching a custom domain.
-Those return `error.code = "owner_only"` (exit 6) — tell the user it's an owner
-action to do in Orbit, then continue with what you can do. The project is already
-selected; you don't pick or switch it.
-
-Owner-only, for reference: `project create` · `project use` · `env rm` · `domain set`.
+What you **cannot** do is administer the project set or destroy config:
+`project create` · `project use` · `env rm` · `domain set` return
+`error.code = "owner_only"` (exit 6). Tell the user it's an owner action to do in
+Orbit, then continue with what you can. The project is already selected; you don't
+pick or switch it.
 
 ## Golden rules
 
@@ -80,19 +77,24 @@ Owner-only, for reference: `project create` · `project use` · `env rm` · `dom
    (what was already decided, so you don't quietly reverse it), and
    `workser design show --json` before writing UI. This project outlives your
    session; that context is how you don't start from zero.
-3. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
+3. **A phased plan goes on the Board before you build it.** One `board create`
+   card per phase, the plan itself as one `doc create` (no `--work-item`, or it's
+   hidden from the Docs panel), and a `decision create` if it settled a real
+   tradeoff. A plan that lives only in your reply is gone when the conversation
+   scrolls. Details: `workser help sdlc-entities`.
+4. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
    reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
    user, then continue. Provisioning the *pinned project's own* db / bucket / auth is
    allowed (it may be approval-gated, not owner-only).
-4. **Approvals are normal.** Some allowed actions may return
+5. **Approvals are normal.** Some allowed actions may return
    `{"error":{"code":"awaiting_approval"}}` (exit 5) while the user approves in the
    Orbit UI. Tell the user to approve, then retry — do **not** try to bypass it.
-5. **Never ask for or store credentials.** Auth is handled by Orbit; you never see keys.
-6. **Verify before "done".** Before telling the user a task is complete, run
+6. **Never ask for or store credentials.** Auth is handled by Orbit; you never see keys.
+7. **Verify before "done".** Before telling the user a task is complete, run
    `workser verify --json` (runs the project's typecheck/lint/build). If it
    reports `"ok": false`, fix the errors it lists and re-run until it passes —
    a green build is the bar for "done", not your own judgement.
-7. **Destructive shell actions are blocked.** Irreversible commands (`rm -rf /`,
+8. **Destructive shell actions are blocked.** Irreversible commands (`rm -rf /`,
    `git reset --hard`, `DROP`/`TRUNCATE`, `curl | sh`, …) are refused by Workser's
    safety policy — don't attempt them; use migrations + scoped changes instead.
 
@@ -102,18 +104,15 @@ Owner-only, for reference: `project create` · `project use` · `env rm` · `dom
 workser status --json                       # 1. orient (project is already pinned)
 workser board list --json                   # 2. what's already tracked
 workser decision list --json                #    …and already decided
-workser board move <id> in-progress --json  # 3. claim the card you're doing
-workser db create --json                    # 4. provision infra the app needs (idempotent)
-workser env set STRIPE_KEY=sk_live_… --json # 5. configure it
+workser board create "Phase 2 — …" --json   # 3. phases? file them + the plan doc
+workser board move <id> in-progress --json  # 4. claim the card you're doing
+workser db create --json                    # 5. provision infra the app needs (idempotent)
+workser env set STRIPE_KEY=sk_live_… --json # 6. configure it
 # … you write the app code with your normal tools …
-workser verify --json                       # 6. green build is the bar for "done"
-workser deploy --prod --watch --json        # 7. ship; returns the live URL
-workser board close <id> --json             # 8. the Board now matches reality
+workser verify --json                       # 7. green build is the bar for "done"
+workser deploy --prod --watch --json        # 8. ship; returns the live URL
+workser board close <id> --json             # 9. the Board now matches reality
 ```
-
-Provisioning the pinned project's own database / bucket / auth is yours to do
-(`db create`, `storage create`, `auth enable`) — the user may need to approve it in
-Orbit (`awaiting_approval`). Only a **custom domain** is an owner action.
 
 ## Reading results
 

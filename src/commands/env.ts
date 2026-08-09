@@ -1,3 +1,4 @@
+import { readFile, writeFile } from "node:fs/promises";
 import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
@@ -95,4 +96,82 @@ export function registerEnv(program: Command): void {
         }),
       ),
     );
+
+  env
+    .command("pull")
+    .description("Write this app's cloud env vars into a local file (default .env.local)")
+    .option("--app <webAppId>", APP_FLAG_HELP)
+    .option("--out <file>", "Local file to write", ".env.local")
+    .action(
+      action(async ({ ctx, opts }) => {
+        const projectId = requireProject(ctx);
+        const items: Array<{ key: string }> = await api(
+          ctx,
+          `/v1/projects/${projectId}/env${appQuery(opts)}`,
+        );
+        const outPath = typeof opts?.out === "string" ? opts.out : ".env.local";
+        if (!items?.length) {
+          return ok({ file: outPath, pulled: [] }, () =>
+            line(pc.dim("No cloud variables to pull.")),
+          );
+        }
+        // One reveal call per key — the daemon approval-gates each of these
+        // exactly like `env get` does, so pulling N keys is N of the same
+        // prompt a human already sees today, not a new bypass.
+        const pulled: Array<{ key: string; value: string }> = [];
+        for (const item of items) {
+          const res = await api(
+            ctx,
+            `/v1/projects/${projectId}/env/${encodeURIComponent(item.key)}${appQuery(opts)}`,
+          );
+          pulled.push({ key: item.key, value: res?.value ?? "" });
+        }
+        await mergeEnvFile(outPath, pulled);
+        ok({ file: outPath, pulled: pulled.map((p) => p.key) }, () =>
+          success(
+            `Pulled ${pulled.length} variable(s) into ${pc.bold(outPath)}.`,
+          ),
+        );
+      }),
+    );
+}
+
+/**
+ * `web_app_envs` stores ONE canonical value per key, not a preview/production
+ * split — so this always writes the same value `env get` would print. A rare
+ * key with a preview-only Vercel override (e.g. an auth callback URL) won't
+ * reflect that override; there is no CLI-reachable endpoint for it yet.
+ */
+const ENV_KEY_LINE = /^([A-Za-z_][A-Za-z0-9_]*)=/;
+
+/** Upsert `vars` into `path`, preserving every other line (comments, blanks,
+ *  unrelated keys) and their original order. */
+async function mergeEnvFile(
+  path: string,
+  vars: Array<{ key: string; value: string }>,
+): Promise<void> {
+  const existing = await readFile(path, "utf8").catch(() => "");
+  const lines = existing.length ? existing.split(/\r?\n/) : [];
+  const remaining = new Map(vars.map((v) => [v.key, v.value]));
+
+  const merged = lines.map((rawLine) => {
+    const match = ENV_KEY_LINE.exec(rawLine);
+    if (!match || !remaining.has(match[1])) return rawLine;
+    const key = match[1];
+    const value = remaining.get(key)!;
+    remaining.delete(key);
+    return `${key}=${formatEnvValue(value)}`;
+  });
+
+  while (merged.length && merged[merged.length - 1] === "") merged.pop();
+  for (const [key, value] of remaining) {
+    merged.push(`${key}=${formatEnvValue(value)}`);
+  }
+  await writeFile(path, merged.join("\n") + "\n", "utf8");
+}
+
+/** Quote a value containing whitespace/quotes/`#` so a dotenv reader doesn't
+ *  truncate it at the first space or treat the rest of the line as a comment. */
+function formatEnvValue(value: string): string {
+  return /[\s"'#]/.test(value) ? JSON.stringify(value) : value;
 }

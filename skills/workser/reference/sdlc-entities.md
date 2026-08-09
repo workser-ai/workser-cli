@@ -55,6 +55,33 @@ purpose — `workser decision show <id>` gives you the context and consequences,
 not just the title. Reach for `workser doc list` / `workser requirement list`
 the same way when the task touches documented behaviour.
 
+## Work with phases → cards + a plan doc, before you build
+
+The moment you split a task into more than one phase, file it — not afterwards,
+and not only in your reply, which is gone once the conversation scrolls.
+
+```bash
+# one card per phase; only the one you're doing goes to in-progress
+workser board create "Phase 1 — schema + migration" \
+  --description "Add orders/line_items tables and the migration." \
+  --status in-progress --json
+workser board create "Phase 2 — checkout API" --description "…" --json
+workser board create "Phase 3 — cart UI"      --description "…" --json
+
+# the plan itself, ONE doc, deliberately NOT linked to a card
+workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
+
+# the approach, if the plan settled something with real alternatives
+workser decision create "Carts live server-side" --context "…" --decision "…" --json
+```
+
+**Don't pass `--work-item` for a multi-phase plan.** A linked document renders on
+its card and is *hidden* from the Docs panel; a plan spanning three phases belongs
+to the project, not to phase 1.
+
+The bar: if the user closed this conversation now, the Board should still show
+what's left and the doc should still explain the plan to whoever continues it.
+
 ## Keep the Board honest while you work
 
 A Board still reading `backlog` after the feature shipped tells the user the
@@ -119,5 +146,5 @@ workser doc update <id> --markdown "$(cat updated.md)"
 
 Record what a future maintainer would need: follow-up work you found but didn't
 do, a choice between real alternatives, a behaviour worth writing down. Don't
-narrate every small step — and never treat filing a card as a substitute for
-the work. Creating a Board card that says "fix the bug" is not fixing the bug.
+narrate every small step — and never treat filing a card as a substitute for the
+work. A card saying "fix the bug" is not fixing the bug.
