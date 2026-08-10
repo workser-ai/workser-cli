@@ -110,7 +110,7 @@ workser db create --json                    # 5. provision infra the app needs (
 workser env set STRIPE_KEY=sk_live_… --json # 6. configure it
 # … you write the app code with your normal tools …
 workser verify --json                       # 7. green build is the bar for "done"
-workser deploy --prod --watch --json        # 8. ship; returns the live URL
+workser deploy --prod --watch --json        # 8. ship; returns the stable *.workser.app URL
 workser board close <id> --json             # 9. the Board now matches reality
 ```
 
