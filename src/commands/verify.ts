@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { api } from "../client.js";
+import { requireLocalApp } from "../context.js";
 import { ok, success, line } from "../output.js";
 
 /**
@@ -22,6 +23,10 @@ export function registerVerify(program: Command): void {
     )
     .action(
       action(async ({ ctx, opts }) => {
+        // Verify runs the project's checks IN THIS FOLDER, via the daemon.
+        // Without one there is nothing to check, and the bare 404 this used to
+        // return looked like a Workser outage.
+        requireLocalApp(ctx, "verify");
         const only = opts.only
           ? String(opts.only)
               .split(",")

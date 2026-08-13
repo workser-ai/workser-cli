@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -28,7 +28,10 @@ function cli(
 beforeAll(async () => {
   await stub.start();
   home = mkdtempSync(join(tmpdir(), "workser-home-"));
-  work = mkdtempSync(join(tmpdir(), "workser-work-"));
+  // `realpathSync` because macOS `/var` is a symlink to `/private/var` and
+  // the CLI reports the resolved path — comparing the raw temp path makes
+  // every cwd assertion fail on a Mac and pass on Linux.
+  work = realpathSync(mkdtempSync(join(tmpdir(), "workser-work-")));
 });
 
 afterAll(async () => {
@@ -813,5 +816,120 @@ describe("SDLC surfaces", () => {
     const r = await cli(["design", "show", "--project", "p_1"]);
     expect(r.code).toBe(0);
     expect(r.json.data.hasBrand).toBe(false);
+  });
+});
+
+/**
+ * Saving, undoing and syncing this folder.
+ *
+ * These replace `git stash` / `git reset` / `git pull` for an agent working in
+ * a Workser-managed folder, so what matters is that the CLI is a faithful skin
+ * over the daemon's restore points — the same objects the cockpit's Undo button
+ * uses — and that it refuses clearly on a machine that has no daemon at all.
+ */
+describe("checkpoint / restore / sync", () => {
+  it("checkpoint → POST the cwd and the label", async () => {
+    const r = await cli(["checkpoint", "before the refactor"]);
+    expect(r.code).toBe(0);
+    const req = stub.lastRequest!;
+    expect(req.method).toBe("POST");
+    expect(req.path).toBe("/v1/checkpoints");
+    expect(req.body).toMatchObject({ cwd: work, label: "before the refactor" });
+    expect(r.json.data.point.ref).toBe("c0ffee1234567890");
+  });
+
+  it("checkpoint works without a label", async () => {
+    const r = await cli(["checkpoint"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.body).toMatchObject({ cwd: work });
+    expect((stub.lastRequest!.body as any).label).toBeUndefined();
+  });
+
+  it("restore --list reads the checkpoints, and writes nothing", async () => {
+    const r = await cli(["restore", "--list"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("GET");
+    expect(stub.lastRequest!.path).toBe("/v1/checkpoints");
+    expect(r.json.data.points).toHaveLength(2);
+  });
+
+  it("restore with no ref means the newest — the daemon picks it", async () => {
+    // Deliberately NOT resolved client-side: two round trips would let a new
+    // checkpoint land between the list and the restore.
+    const r = await cli(["restore"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/undo");
+    expect(stub.lastRequest!.body).toMatchObject({ cwd: work });
+    expect((stub.lastRequest!.body as any).ref).toBeUndefined();
+  });
+
+  it("restore <ref> asks for that exact one", async () => {
+    const r = await cli(["restore", "dec0de0987654321"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.body).toMatchObject({
+      cwd: work,
+      ref: "dec0de0987654321",
+    });
+  });
+
+  it("sync → POST the project's git/sync with this folder", async () => {
+    const r = await cli(["sync", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/git/sync");
+    expect(stub.lastRequest!.body).toMatchObject({ cwd: work });
+    expect(r.json.data.state).toBe("synced");
+  });
+
+  it("sync --app names the app whose repo this folder holds", async () => {
+    // A project holds several apps, each with its own repo. Omitted, the daemon
+    // resolves it from the folder; passed, the caller has already decided.
+    const r = await cli(["sync", "--project", "p_1", "--app", "app_2"]);
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest!.body).toMatchObject({ webAppId: "app_2" });
+  });
+
+  it("a sync the daemon refuses exits non-zero", async () => {
+    // The daemon answers 200 with `{ ok: false }` for an application-level
+    // failure. Reading only the HTTP status reports "Synced" for a sync that
+    // did not happen.
+    stub.overrides.set("POST /v1/projects/p_1/git/sync", {
+      body: { ok: false, state: "diverged", message: "Both sides changed." },
+    });
+    const r = await cli(["sync", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+  });
+});
+
+describe("commands that need the local app", () => {
+  /** A cloud endpoint: a real host, a valid token, and no daemon anywhere. */
+  const cloud = (args: string[]) =>
+    runCli(["--json", ...args], {
+      endpoint: "https://api.workser.ai",
+      token: TOKEN,
+      home,
+      cwd: work,
+    });
+
+  for (const cmd of [
+    ["checkpoint"],
+    ["restore"],
+    ["sync", "--project", "p_1"],
+    ["deploy", "--project", "p_1"],
+    ["verify"],
+  ]) {
+    it(`\`${cmd[0]}\` explains itself instead of 404ing off a machine with no app`, async () => {
+      const r = await cloud(cmd);
+      expect(r.code).not.toBe(0);
+      expect(r.json.error.code).toBe("needs_local_app");
+      // The fix has to be IN the message: this is read on a computer where the
+      // user has no idea why a command that works elsewhere doesn't work here.
+      expect(r.json.error.message).toMatch(/workser\.ai\/download/);
+    });
+  }
+
+  it("doctor still works there — it is how you find out why", async () => {
+    const r = await cloud(["doctor"]);
+    expect(r.code).toBe(0);
+    expect(r.json.data.mode).toBe("cloud");
   });
 });

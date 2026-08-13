@@ -121,6 +121,39 @@ export function runTarget(ctx: Context): string {
   return ctx.runId || "current";
 }
 
+/**
+ * Refuse, clearly, a command that can only work through the local app.
+ *
+ * WHY THIS EXISTS. Some commands are about FILES — publishing this folder,
+ * checkpointing it, syncing it. The daemon does that work because it is the
+ * only part of Workser standing next to the folder with a git binary. Nothing
+ * on the cloud side can: `/v1/*` is the DAEMON's contract, and core-api serves
+ * the same shapes at `/orbit/*` behind a bridge JWT that only a registered
+ * device holds.
+ *
+ * So on a computer with the CLI and a login token but no Workser app — a
+ * colleague's laptop, a CI box, a server — these commands were reaching a real
+ * host, authenticating fine, and coming back `404 Not Found`. That reads as
+ * "Workser is broken" or "my project is gone". It is neither: the machine
+ * simply isn't set up to hold code.
+ *
+ * Naming the reason and the fix costs one check and turns a dead end into an
+ * instruction. Everything that is pure API — `workser projects`, `db`, `env`,
+ * `logs`, `status` — is untouched and still works from anywhere.
+ */
+export function requireLocalApp(ctx: Context, what: string): void {
+  if (ctx.mode === "daemon") return;
+  throw new WorkserError(
+    `\`workser ${what}\` works with the code in this folder, so it needs the Workser app running on this computer.\n` +
+      `\nThis shell is talking to ${ctx.endpoint} instead of a local app.\n` +
+      `\n  • On your own computer: open Workser and try again.` +
+      `\n  • On a computer without Workser: install it from https://workser.ai/download,` +
+      `\n    sign in, and open this project — that is what puts the code here.` +
+      `\n\nCommands that only read your account (projects, env, db, logs, status) work as normal.`,
+    { code: "needs_local_app" },
+  );
+}
+
 export function requireProject(ctx: Context): string {
   if (!ctx.projectId) {
     throw new WorkserError(

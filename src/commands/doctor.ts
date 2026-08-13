@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
@@ -8,8 +9,8 @@ import { ok, line } from "../output.js";
 /**
  * `workser doctor` — print the resolved connection so onboarding problems
  * ("which endpoint? am I authed? which project?") are debuggable in one command.
- * Purely local: it never makes a network call, so it works even when the daemon
- * is down. The token is masked; only its presence + source are shown.
+ * No network call, so it works even when the daemon is down. The token is
+ * masked; only its presence + source are shown.
  */
 export function registerDoctor(program: Command): void {
   program
@@ -58,12 +59,15 @@ export function registerDoctor(program: Command): void {
               ? "session"
               : undefined;
 
+        const git = gitVersion();
+
         const report = {
           endpoint: ctx.endpoint,
           endpointSource,
           env,
           envIgnored,
           mode: ctx.mode,
+          git: { present: git !== null, version: git },
           token: {
             present: Boolean(ctx.token),
             masked: ctx.token ? maskToken(ctx.token) : null,
@@ -99,6 +103,27 @@ export function registerDoctor(program: Command): void {
               (projectSource ? pc.dim(`  [${projectSource}]`) : ""),
           );
           line(`  cwd:       ${ctx.cwd}`);
+          line(`  git:       ${git ?? pc.dim("not on this shell's PATH")}`);
+          if (!git) {
+            line("");
+            // NOT "install git". The app ships its own and puts it on the
+            // agent's PATH (see the desktop's `git-bin.ts`), so sync, deploy,
+            // checkpoint and restore all work on a computer that has never had
+            // one — which is most of our users. Telling a shop owner to run
+            // `xcode-select --install` to publish their own website was the
+            // wrong instruction; the only thing missing here is git in THIS
+            // terminal, which matters only if the user wants it themselves.
+            line(
+              pc.dim(
+                "  Workser brings its own git, so syncing and publishing still work.",
+              ),
+            );
+            line(
+              pc.dim(
+                `  Only needed if you want to run git yourself here. ${GIT_INSTALL_HINT}`,
+              ),
+            );
+          }
           if (envIgnored) {
             line("");
             line(
@@ -117,6 +142,48 @@ export function registerDoctor(program: Command): void {
       }),
     );
 }
+
+/**
+ * Is there a usable `git` on PATH, and which one?
+ *
+ * WHY DOCTOR ASKS THIS. Workser needs no git CREDENTIAL — code moves as bundles
+ * over the Workser API and the managed folder has no remote — but it does need
+ * the git BINARY: every sync, pull, push, deploy and ship-status call in the
+ * daemon shells out to it. Nothing checked, so on a machine without one
+ * (Windows with no Git for Windows; a Mac where Command Line Tools were never
+ * installed) all of those failed with a bare ENOENT that reads like a Workser
+ * outage. This is the command people are told to run when things are broken, so
+ * it is the right place to name the actual cause.
+ *
+ * `spawnSync` and not `execSync`: a missing binary comes back as `error` rather
+ * than a thrown exception, so the absent case needs no try/catch to be the
+ * ordinary path it is. Local and instant — doctor still makes no network call.
+ */
+function gitVersion(): string | null {
+  try {
+    const res = spawnSync("git", ["--version"], {
+      encoding: "utf8",
+      timeout: 5_000,
+      // A macOS box with no Command Line Tools has a `git` SHIM that pops a GUI
+      // installer when run. Inheriting stdio would surface that dialog from a
+      // command the user expects to just print a report.
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    if (res.error || res.status !== 0) return null;
+    const out = (res.stdout || "").toString().trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Platform-appropriate way to get git, for the doctor's fix line. */
+const GIT_INSTALL_HINT =
+  process.platform === "darwin"
+    ? "Install it with: xcode-select --install"
+    : process.platform === "win32"
+      ? "Install it from: https://git-scm.com/download/win"
+      : "Install it with your package manager, e.g. apt install git";
 
 /** Show the shape of a token without revealing it: first 3 + last 3 chars. */
 function maskToken(token: string): string {

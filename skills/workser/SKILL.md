@@ -5,19 +5,16 @@ description: Provision, deploy, and operate the current Workser app. Use when th
 
 # Workser — ship & run the current app from the terminal
 
-You have the `workser` CLI. It lets you act as the user's DevOps engineer for the
-**one project** Workser Orbit has linked to this directory: provision and browse its
-Neon Postgres database, deploy it, manage its env vars and bucket, provision auth,
-and read its logs — **on the user's own account**, through the Workser Orbit app
-(which handles auth and shows the user what you're doing).
-
-For writing code, keep using your normal tools. Use `workser` for the last mile.
+You have the `workser` CLI. Use it to operate the **one project** Workser Orbit has
+linked to this directory — infrastructure, config, shipping — **on the user's own
+account**, through the Orbit app, which handles auth and shows them what you're
+doing. For writing code, keep using your normal tools.
 
 ## Read one guide, not all of them
 
-This page is the index. The detail lives in the CLI itself — `workser help <topic>`
-prints one focused guide, about a screen long. Find your row, run that **one**
-command. Don't print them all; you are paying for every line you load.
+This page is the index. `workser help <topic>` prints one focused guide, about a
+screen long. Find your row, run that **one** command — you pay for every line you
+load.
 
 | You need to… | Commands | Run |
 | --- | --- | --- |
@@ -25,6 +22,7 @@ command. Don't print them all; you are paying for every line you load.
 | Follow the project's brand — colours, fonts, logo | `design …` | `workser help brand` |
 | Provision or query Postgres; list end users | `db …`, `auth …` | `workser help database` |
 | Deploy, set env vars, read logs, check a domain | `deploy`, `env …`, `logs`, `versions`, `domain`, `open` | `workser help deploy` |
+| Save work before a risky change, undo it, sync this folder | `checkpoint`, `restore`, `sync` | `workser help version-control` |
 | Put files in the project's bucket | `storage …` | `workser help storage` |
 | Read or write products, orders, customers, deals | `business …` | `workser help business` |
 | Use the project's own Neon buckets or functions | `neon …` | `workser help neon` |
@@ -35,9 +33,8 @@ command. Don't print them all; you are paying for every line you load.
 | Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
 
-`workser help` with no topic lists them. **The CLI is the source of truth** — it
-ships these guides itself, so they match the version you are running, and
-`workser <command> --help` is generated from the implementation.
+`workser help` lists them all; `workser <command> --help` gives exact flags. Both
+come from the CLI itself, so they match the version you are running.
 
 ## Orientation (no guide needed)
 
@@ -123,6 +120,8 @@ workser board close <id> --json             # 9. the Board now matches reality
   - `no_project` → no project is linked here; the user links it in Orbit.
   - `owner_only` → an owner action; tell the user to do it in Orbit, then continue.
   - `awaiting_approval` → user must approve in Orbit; then retry.
+  - `needs_local_app` → this machine has no Workser app, so folder commands
+    can't run. Say so; don't reach for `git` instead.
 
 Keep the user informed in plain language ("Provisioned a database and deployed —
 it's live at <url>"), not raw JSON.

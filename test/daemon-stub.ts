@@ -178,6 +178,36 @@ function route(
 ): { status?: number; body?: unknown } | undefined {
   const { method, path } = req;
 
+  if (path === "/v1/checkpoints") {
+    if (method === "POST") {
+      return {
+        body: {
+          point: {
+            ref: "c0ffee1234567890",
+            at: "2026-08-11T02:00:00.000Z",
+            label: (req.body as any)?.label ?? "a manual checkpoint",
+          },
+        },
+      };
+    }
+    return {
+      body: {
+        points: [
+          { ref: "c0ffee1234567890", at: "2026-08-11T02:00:00.000Z", label: "before the refactor" },
+          { ref: "dec0de0987654321", at: "2026-08-10T09:30:00.000Z", label: "a manual checkpoint" },
+        ],
+      },
+    };
+  }
+
+  if (method === "POST" && path === "/v1/undo") {
+    return { body: { ok: true, restoredTo: "beef1234", filesChanged: 3 } };
+  }
+
+  if (method === "POST" && /^\/v1\/projects\/[^/]+\/git\/sync$/.test(path)) {
+    return { body: { ok: true, state: "synced", ref: "5ynced00" } };
+  }
+
   if (method === "GET" && path === "/v1/whoami") {
     return {
       body: {

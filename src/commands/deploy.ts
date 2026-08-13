@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { api, sleep } from "../client.js";
-import { requireProject, type Context } from "../context.js";
+import { requireProject, requireLocalApp, type Context } from "../context.js";
 import { ok, success, line, isJson } from "../output.js";
 import { colorStatus } from "./status.js";
 
@@ -20,6 +20,12 @@ export function registerDeploy(program: Command): void {
     )
     .action(
       action(async ({ ctx, opts }) => {
+        // Deploy publishes THIS FOLDER: the daemon commits the cwd, bundles it
+        // and uploads the bundle. On a machine with only the CLI and a token
+        // there is no daemon and no folder, and this used to answer `Cannot
+        // POST /v1/projects/<id>/deploy` — a raw 404 that reads like Workser is
+        // down rather than like "this computer doesn't have your code".
+        requireLocalApp(ctx, "deploy");
         const projectId = requireProject(ctx);
         // `--app` is rarely needed: the daemon resolves the app from the folder
         // being deployed, which is the same question. It matters when one folder
