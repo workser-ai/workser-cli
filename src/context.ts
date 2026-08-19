@@ -48,6 +48,18 @@ export interface Context {
    * set when the CLI runs by hand or from CI.
    */
   conversationId?: string;
+  /**
+   * The AI Tech Team PROJECT task this run belongs to, when it is one.
+   *
+   * Orbit sets `WORKSER_PROJECT_TASK_ID` on the agent process for a task
+   * thread. Deliberately separate from `runId`: that one is Computer-mode's
+   * `ai_agent_tasks`, a different table, and both are uuids — an agent that
+   * read one and got the other would silently address the wrong object.
+   *
+   * Absent when the CLI is run by hand, which is why every command that needs
+   * it takes `--task` as well.
+   */
+  projectTaskId?: string;
 }
 
 /**
@@ -107,8 +119,19 @@ export function buildContext(opts: GlobalOpts): Context {
 
   const runId = process.env.WORKSER_RUN_ID || undefined;
   const conversationId = process.env.WORKSER_CONVERSATION_ID || undefined;
+  const projectTaskId = process.env.WORKSER_PROJECT_TASK_ID || undefined;
 
-  return { endpoint, socketPath, token, mode, cwd, projectId, runId, conversationId };
+  return {
+    endpoint,
+    socketPath,
+    token,
+    mode,
+    cwd,
+    projectId,
+    runId,
+    conversationId,
+    projectTaskId,
+  };
 }
 
 /**
