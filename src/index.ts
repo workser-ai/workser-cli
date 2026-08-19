@@ -32,6 +32,7 @@ import { registerAsk } from "./commands/ask.js";
 import { registerSearch } from "./commands/search.js";
 import { registerBoard } from "./commands/board.js";
 import { registerTask } from "./commands/task.js";
+import { assertRoleMayRun } from "./role-guard.js";
 import { registerDecision } from "./commands/decision.js";
 import { registerDoc } from "./commands/doc.js";
 import { registerDesign } from "./commands/design.js";
@@ -107,5 +108,18 @@ registerTask(program);
 registerDecision(program);
 registerDoc(program);
 registerDesign(program);
+
+/**
+ * The role check runs BEFORE commander dispatches.
+ *
+ * Not inside `action()`: by the time a command's handler runs it has already
+ * been resolved, and a `--help` or a validation error would report the wrong
+ * thing first. Here the refusal is the only thing that happens.
+ */
+try {
+  assertRoleMayRun(process.argv.slice(2));
+} catch (e) {
+  fail(e);
+}
 
 program.parseAsync(process.argv).catch((e) => fail(e));
