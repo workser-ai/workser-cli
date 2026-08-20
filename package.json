@@ -38,7 +38,7 @@
     "start": "node dist/index.js",
     "test": "npm run build && vitest run",
     "preversion": "npm run typecheck && npm run test",
-    "postversion": "git push && git push --tags && npm publish",
+    "postversion": "git push -u origin HEAD && git push --tags && npm publish",
     "prepublishOnly": "npm run build && npm run typecheck && npm run test"
   },
   "dependencies": {
