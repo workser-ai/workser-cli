@@ -208,6 +208,191 @@ function route(
     return { body: { ok: true, state: "synced", ref: "5ynced00" } };
   }
 
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/deployments$/.test(path)) {
+    return {
+      body: {
+        deployments: [
+          {
+            id: "d_2",
+            version: 2,
+            environment: "production",
+            status: "ready",
+            url: "https://shop.example",
+            created_at: "2026-08-19T10:00:00.000Z",
+            webAppName: "Shop",
+          },
+          {
+            id: "d_1",
+            version: 1,
+            environment: "preview",
+            status: "ready",
+            url: "https://preview.shop.example",
+            created_at: "2026-08-18T10:00:00.000Z",
+            webAppName: "Shop",
+          },
+        ],
+        total: 2,
+      },
+    };
+  }
+
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/deployments\/promote$/.test(path)
+  ) {
+    return {
+      body: {
+        id: "d_3",
+        version: (req.body as any)?.version ?? 3,
+        environment: "production",
+        status: "building",
+        url: "https://shop.example",
+      },
+    };
+  }
+
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/deployments\/[^/]+\/logs$/.test(path)
+  ) {
+    return { body: { events: [{ type: "stdout", text: "Build succeeded" }] } };
+  }
+
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/neon-branches$/.test(path)) {
+    return {
+      body: [
+        { id: "br_live", name: "main", parent_id: null, isProjectBranch: true },
+        { id: "br_qa", name: "qa-run", parent_id: "br_live", isProjectBranch: false },
+      ],
+    };
+  }
+  if (method === "POST" && /^\/v1\/projects\/[^/]+\/neon-branches$/.test(path)) {
+    return { body: { branch: { id: "br_new", name: (req.body as any)?.name } } };
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/neon-branches\/[^/]+\/reset$/.test(path)
+  ) {
+    return { body: { ok: true } };
+  }
+  if (
+    method === "DELETE" &&
+    /^\/v1\/projects\/[^/]+\/neon-branches\/[^/]+$/.test(path)
+  ) {
+    return { body: { ok: true } };
+  }
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/neon-databases$/.test(path)) {
+    return {
+      body: [
+        { name: "app", owner_name: "app_owner", isProjectDatabase: true },
+        { name: "scratch", owner_name: "app_owner", isProjectDatabase: false },
+      ],
+    };
+  }
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/neon-endpoints$/.test(path)) {
+    return {
+      body: [
+        {
+          id: "ep_1",
+          type: "read_write",
+          current_state: "idle",
+          branch_id: "br_live",
+          host: "ep-1.neon.tech",
+        },
+      ],
+    };
+  }
+
+  if (method === "GET" && /^\/v1\/projects\/[^/]+\/usage$/.test(path)) {
+    return {
+      body: {
+        projectId: "p_1",
+        organizationId: "o_1",
+        tier: "starter",
+        complete: false,
+        dimensions: [
+          { id: "db_storage_gb", label: "Database", used: 2.5, unit: "GB", limit: 10, kind: "soft" },
+          {
+            id: "file_storage_gb",
+            label: "Files",
+            used: null,
+            unit: "GB",
+            limit: 10,
+            kind: "soft",
+            note: "The file store could not be read just now.",
+          },
+          { id: "projects", label: "Projects", used: 2, unit: "count", limit: 2, kind: "hard" },
+        ],
+      },
+    };
+  }
+
+  if (method === "GET" && path === "/v1/health") {
+    return {
+      body: {
+        projectId: "p_1",
+        checks: [
+          {
+            appId: "a_1",
+            appName: "Ordering page",
+            environment: "production",
+            url: "https://shop.example",
+            ok: true,
+            status: 200,
+            ms: 84,
+            error: null,
+            failures: 0,
+            incidentOpened: false,
+          },
+          {
+            appId: "a_1",
+            appName: "Ordering page",
+            environment: "preview",
+            url: "https://preview.shop.example",
+            ok: false,
+            status: 503,
+            ms: 120,
+            error: "answered 503",
+            failures: 2,
+            incidentOpened: false,
+          },
+        ],
+        failuresBeforeIncident: 3,
+        note: null,
+      },
+    };
+  }
+
+  if (method === "GET" && /^\/v1\/apps\/[^/]+\/health$/.test(path)) {
+    return {
+      body: {
+        projectId: "p_1",
+        checks: [],
+        failuresBeforeIncident: 3,
+        note: "This app has no web address yet, so there is nothing to check.",
+      },
+    };
+  }
+
+  if (method === "GET" && path === "/v1/apps") {
+    return {
+      body: [
+        {
+          id: "a_1",
+          name: "Shop",
+          type: "web",
+          status: "live",
+          previewUrl: "https://preview.shop.workser.app",
+          productionUrl: "https://shop.example",
+          // Ephemeral. Present in the real response; `urls` must never print it.
+          previewDeploymentUrl: "https://abc123.vercel.app",
+          productionDeploymentUrl: "https://def456.vercel.app",
+        },
+        { id: "a_2", name: "Ordering bot", type: "ai-agent", status: "not_deployed" },
+      ],
+    };
+  }
+
   if (method === "GET" && path === "/v1/whoami") {
     return {
       body: {
@@ -410,10 +595,16 @@ function route(
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/env$/.test(path)) {
+    // Per-environment values (migration 125). With an environment named, one
+    // row per key with the value that applies THERE; without, the shared value
+    // plus where it differs.
+    if (req.query.environment === "production") {
+      return { body: [{ key: "API_KEY", masked: "pr•", environment: "production" }] };
+    }
     return {
       body: [
-        { key: "API_KEY", masked: "sk-•••" },
-        { key: "NODE_ENV", masked: "pr•" },
+        { key: "API_KEY", masked: "sk-•••", overriddenIn: ["production"] },
+        { key: "NODE_ENV", masked: "pr•", overriddenIn: [] },
       ],
     };
   }
@@ -472,10 +663,24 @@ function route(
   }
 
   if (method === "GET" && /^\/v1\/projects\/[^/]+\/logs$/.test(path)) {
+    // Environment-aware since Phase 6a: an environment nothing has been
+    // deployed to answers with a NOTE, not an empty list. The empty list was
+    // indistinguishable from a healthy silent build.
+    if (req.query.environment === "preview") {
+      return {
+        body: {
+          entries: [],
+          environment: "preview",
+          note: "Nothing has been deployed in preview yet, so there are no build logs to show.",
+        },
+      };
+    }
     return {
       body: {
         entries: [{ ts: "t0", level: "info", message: "hello" }],
         cursor: "c1",
+        deploymentId: "d_2",
+        environment: req.query.environment,
       },
     };
   }

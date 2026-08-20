@@ -177,6 +177,25 @@ export function requireLocalApp(ctx: Context, what: string): void {
   );
 }
 
+/**
+ * Needs the desktop app, but not the code.
+ *
+ * `requireLocalApp` says "works with the code in this folder", which is true of
+ * deploy and verify and false of a health probe: nothing is read from disk, but
+ * the check has to be MADE from a machine that can reach the site. A message
+ * that names the wrong reason sends someone to clone a repo they do not need.
+ */
+export function requireDaemon(ctx: Context, what: string, why: string): void {
+  if (ctx.mode === "daemon") return;
+  throw new WorkserError(
+    `\`workser ${what}\` ${why}, so it needs the Workser app running on this computer.\n` +
+      `\nThis shell is talking to ${ctx.endpoint} instead of a local app.\n` +
+      `\n  • On your own computer: open Workser and try again.` +
+      `\n  • On a computer without Workser: install it from https://workser.ai/download and sign in.`,
+    { code: "needs_local_app" },
+  );
+}
+
 export function requireProject(ctx: Context): string {
   if (!ctx.projectId) {
     throw new WorkserError(

@@ -22,6 +22,7 @@ workser task subtask add <title> [--role <value>] [--kind <value>]
 workser task subtask list [taskId]
 workser task subtask update <id> [--title|--note|--role|--kind|--scope]
 workser task subtask remove <id>
+workser task subtask send-back <id> --note <text>   # redo it, and say why
 
 workser task can-start [id]             # may work begin? refuses until approved
 workser task approval request           # tell the owner the plan is ready
@@ -80,3 +81,23 @@ workser task done --summary "The report now shows cost per KOL, with six months 
 ```
 
 Write the summary for someone who runs a business and does not read code.
+
+## Sending a step back
+
+A step that finished but is not good enough is **sent back**, not replaced:
+
+```
+workser task subtask send-back 3f2a… --note "The totals ignore refunds."
+```
+
+That puts it in the queue again as a **second attempt** on the same step. Two
+reasons it matters that this is not a new step:
+
+- The owner's screen can then say *"1 send-back, fixed — 2nd run passed"*. A
+  replacement step says only that two steps exist, which tells them nothing
+  about whether their team caught its own mistake.
+- `--note` is the reason, and it is recorded against the attempt being
+  rejected. Without it the history can say a step ran twice but not why.
+
+It refuses a step that is still working. Let it finish first — the run is
+still writing to it.

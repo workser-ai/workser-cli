@@ -6,6 +6,9 @@ import { requireProject } from "../context.js";
 import { ok, line } from "../output.js";
 import { WorkserError } from "../errors.js";
 import { recordEntityStep } from "./record-step.js";
+import { diagramKind, extractDiagrams } from "../mermaid-fences.js";
+import { readFileSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 
 /**
  * `workser doc` — the project's Docs (`daemon/routes/documents.ts`), the same
@@ -134,6 +137,73 @@ export function registerDoc(program: Command): void {
     );
 
   doc
+    .command("diagram <id>")
+    .description(
+      "List the diagrams in a document — `--check` fails when it has none",
+    )
+    // The gate half. An architecture document with no diagram in it is a
+    // document that says it explains how the system fits together and does not;
+    // this is the cheapest way for an agent to catch that in its own work
+    // before a human reads it and has to say so.
+    .option("--check", "exit non-zero when the document contains no diagram")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const projectId = requireProject(ctx);
+        const row = await api<OrbitDocument>(
+          ctx,
+          `/v1/projects/${projectId}/documents/${args[0]}`,
+        );
+        if (!row) {
+          throw new WorkserError(`No document with id "${args[0]}" on this project.`, {
+            code: "bad_request",
+          });
+        }
+
+        // Read the MIRROR, not `contentJson`. The mirror is the markdown a
+        // human and git both see, and a diagram that is in the block content
+        // but missing from the mirror is exactly the failure worth catching.
+        const markdown = readMirror(ctx.cwd, row.filePath);
+        const diagrams = markdown === null ? [] : extractDiagrams(markdown);
+
+        const payload = {
+          id: row.id,
+          title: row.title,
+          filePath: row.filePath,
+          diagrams: diagrams.map((code) => ({ kind: diagramKind(code), code })),
+        };
+
+        ok(payload, () => {
+          line(`${pc.bold(row.title)}  ${pc.dim(row.id)}`);
+          if (markdown === null) {
+            line(
+              pc.dim(
+                row.filePath
+                  ? `Could not read ${row.filePath} from this folder.`
+                  : "This document has no markdown mirror on disk yet.",
+              ),
+            );
+          } else if (!diagrams.length) {
+            line(pc.dim("No diagrams in this document."));
+          } else {
+            for (const [i, code] of diagrams.entries()) {
+              const kind = diagramKind(code) ?? "diagram";
+              line(`${pc.dim(String(i + 1))}  ${kind}  ${pc.dim(`${code.split("\n").length} lines`)}`);
+            }
+          }
+        });
+
+        if (opts.check && !diagrams.length) {
+          throw new WorkserError(
+            markdown === null
+              ? `"${row.title}" has no markdown on disk to check. Save it from the Docs panel, or write it with \`workser doc update ${row.id} --markdown ...\`.`
+              : `"${row.title}" has no diagram. Add one with a \`\`\`mermaid fence describing how the pieces fit together.`,
+            { code: "bad_request" },
+          );
+        }
+      }),
+    );
+
+  doc
     .command("update <id>")
     .description("Revise an existing document rather than creating a second copy of it")
     .option("--title <text>", "new title")
@@ -167,4 +237,21 @@ export function registerDoc(program: Command): void {
         ok(row, () => line(`Updated document ${pc.bold(row.id)} — ${row.title}`));
       }),
     );
+}
+
+/**
+ * The document's markdown mirror, read from this folder.
+ *
+ * `filePath` is repo-relative (`.workser/docs/<id>.md`) because it is stored by
+ * whichever machine last saved the document, and an absolute path from someone
+ * else's computer would be meaningless here. Returns null — never throws — for
+ * "no mirror" and "cannot read it", which the caller words differently.
+ */
+function readMirror(cwd: string, filePath: string | null): string | null {
+  if (!filePath) return null;
+  try {
+    return readFileSync(isAbsolute(filePath) ? filePath : join(cwd, filePath), "utf8");
+  } catch {
+    return null;
+  }
 }

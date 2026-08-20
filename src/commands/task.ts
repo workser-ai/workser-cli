@@ -256,6 +256,50 @@ export function registerTask(program: Command): void {
     );
 
   /**
+   * Send a step back to be done again.
+   *
+   * THE MANAGER'S VERB, and the only way a second attempt ever happens. The
+   * runner will not touch a step whose status is not `todo`, so a step judged
+   * insufficient stays finished for ever unless something reopens it — which
+   * is why "1 send-back, fixed" was, until this existed, a sentence the
+   * product could not produce.
+   *
+   * The note is not decoration. It closes the rejected attempt as
+   * `changes_requested` carrying the reason, which is what lets the history
+   * say WHY a step ran twice instead of just that it did.
+   */
+  subtask
+    .command("send-back <id>")
+    .description("Send a finished step back to be done again, with the reason")
+    .requiredOption("--note <text>", "what was wrong with it")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const row = await api<{ reopened?: boolean; reason?: string }>(
+          ctx,
+          `/v1/project-subtasks/${encodeURIComponent(String(args[0]))}/reopen`,
+          { method: "POST", body: { note: opts.note } },
+        );
+        ok(row, () => {
+          if (row?.reopened) {
+            line(`${pc.green("sent back")} — it will be picked up again`);
+            return;
+          }
+          // Every refusal names itself. "Nothing happened" and "it is already
+          // waiting to run" look identical from the outside otherwise.
+          line(
+            pc.yellow(
+              row?.reason === "already_open"
+                ? "already waiting to be picked up — nothing to send back"
+                : row?.reason === "still_working"
+                  ? "still working — let it finish before sending it back"
+                  : "could not send that step back",
+            ),
+          );
+        });
+      }),
+    );
+
+  /**
    * Ask whether this step may start.
    *
    * The 409 is the product, not an error to route around: nothing a manager

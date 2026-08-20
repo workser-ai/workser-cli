@@ -58,3 +58,36 @@ other surface the brand feeds.
 
 For generating artwork *in* the brand's palette, see `workser help images` —
 put the colours from `design show` into the prompt.
+
+## The three places design lives — and which one you are in
+
+They are separate on purpose, and confusing them is the commonest mistake here.
+
+| What | Scope | Where |
+| --- | --- | --- |
+| **Brand** — colours, fonts, logo | The **project** | `business_settings`, read with `design show` |
+| **Design files** — the `.fig` work | The **project**, many files | the project's design workspace folder |
+| **Layout options** — choices to show the owner | **One app** | `design/options.json` in that app's folder |
+
+**Design is not an app.** It has no port, no URL, nothing to deploy. Never create
+an app for it.
+
+When you write `design/options.json`, put the design file each option came from
+in a `source` field:
+
+```json
+{ "options": [
+  { "id": "warm", "name": "Warm and simple", "route": "/",
+    "note": "Bigger type, more space.", "source": "hero-v2.fig" }
+] }
+```
+
+`source` is a path **inside the project's design workspace** — relative, no
+`..`, no absolute paths, no URLs. Anything else is dropped. Leave it out when the
+option was written straight into code with no design file behind it; that is an
+ordinary case and inventing a source is worse than omitting one.
+
+Why it matters: the owner picks an option in one app and later opens the design
+workspace. Without `source`, nothing connects the decision they just made to the
+file it came from, and "why does the site look like this?" has three unrelated
+answers.

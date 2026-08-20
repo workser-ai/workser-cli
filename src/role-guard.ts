@@ -26,6 +26,19 @@ import { WorkserError } from "./errors.js";
 const READS = [
   "task", "board", "doc", "decision", "memory", "search", "verify", "logs",
   "status", "help", "whoami", "login", "auth", "project", "open", "doctor",
+  // Both READ and report. `scan` reads files and shells out to npm; `health`
+  // makes a GET request to an address that is already public. Neither can
+  // change anything, which is why the roles that exist to look — qa, security,
+  // sre, analyst — get them without getting anything else.
+  "scan", "health",
+  // Read-only views of what is running. Added with Phase 6a: an SRE that can
+  // read logs but cannot list deployments or read the app's address is being
+  // asked to diagnose an outage with one eye shut.
+  "urls", "deployments",
+  // Reading the plan and what is used against it. An agent proposing "add
+  // another project" can only sensibly propose it if it can find out the plan
+  // allows two and two already exist.
+  "usage",
 ];
 
 const BUILDS = [
@@ -47,6 +60,12 @@ const ROLE_VERBS: Record<string, string[]> = {
   analyst: READS,
   sre: [...READS, "deploy", "domain", "versions"],
   devops: [...BUILDS, "deploy", "domain", "versions"],
+  // NOTE: `deployments` reaches READS above, so every role can LIST and
+  // INSPECT. That is correct — history is a read. The two verbs that change
+  // production (`promote`, `rollback`) are not gated here at all, and must not
+  // be: they are gated in the DAEMON, as `deploy.prod`, which is a door "just
+  // do it" cannot open. A second, verb-name-based rule here would be a weaker
+  // copy of a control that already works.
 };
 
 /** Verbs no subagent may run, whatever its role. */

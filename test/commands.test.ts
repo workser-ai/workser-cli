@@ -1,4 +1,10 @@
-import { mkdtempSync, rmSync, readFileSync, realpathSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -572,11 +578,31 @@ describe("owner-only boundary (agent cannot administer the project set / destroy
     { name: "project create", argv: ["project", "create", "blog"] },
     { name: "project use", argv: ["project", "use", "p_2"] },
     { name: "env rm", argv: ["env", "rm", "API_KEY", "--project", "p_1"] },
-    {
-      name: "domain set",
-      argv: ["domain", "set", "example.com", "--project", "p_1"],
-    },
+    // `domain set` used to be here. It is now `domain add`, and it is ALLOWED —
+    // the agent is meant to run the project's infrastructure. Two gates replaced
+    // the categorical refusal: a reserved-domain check in the CLI (below) and
+    // the daemon's `domain.set` approval prompt. See src/commands/domain.ts.
   ];
+
+  it("domain add refuses a Workser-owned name, without a network call", async () => {
+    // The replacement for the old owner-only refusal. A reserved name must be
+    // stopped HERE so it never reaches the owner's approval prompt — otherwise
+    // that prompt fills with requests nobody should have to read, and the owner
+    // learns to click through it.
+    const before = stub.requests.length;
+    const r = await cli(["domain", "add", "app.workser.ai", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.ok).toBe(false);
+    expect(String(r.json.error.message)).toMatch(/belongs to Workser/i);
+    expect(stub.requests.length).toBe(before);
+  });
+
+  it("domain add refuses a provider hostname too", async () => {
+    const before = stub.requests.length;
+    const r = await cli(["domain", "add", "x.vercel.app", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+    expect(stub.requests.length).toBe(before);
+  });
 
   for (const c of cases) {
     it(`${c.name} → owner_only (exit 6), no network call`, async () => {
@@ -931,5 +957,315 @@ describe("commands that need the local app", () => {
     const r = await cloud(["doctor"]);
     expect(r.code).toBe(0);
     expect(r.json.data.mode).toBe("cloud");
+  });
+});
+
+describe("checks — scan and health", () => {
+  it("health → GET /v1/health, and fails while anything is down", async () => {
+    const r = await cli(["health"]);
+    expect(stub.lastRequest!.method).toBe("GET");
+    expect(stub.lastRequest!.path).toBe("/v1/health");
+    // Two addresses, one of them not answering. A command that exits 0 here
+    // would let a step declare the work done over a broken site.
+    expect(r.code).not.toBe(0);
+    expect(r.json.data.checks).toHaveLength(2);
+  });
+
+  it("health --app asks about that app, and says why there is nothing", async () => {
+    const r = await cli(["health", "--app", "a_9"]);
+    expect(stub.lastRequest!.path).toBe("/v1/apps/a_9/health");
+    // Nothing published is not a failure — but it must not read as a pass
+    // either, which is what `note` is for.
+    expect(r.code).toBe(0);
+    expect(r.json.data.note).toMatch(/no web address yet/);
+  });
+
+  it("health off a machine with no Workser app names the right reason", async () => {
+    // Not "we cannot find your code" — nothing is read from disk. The probe
+    // has to be made from a computer that can reach the site.
+    const r = await runCli(["--json", "health"], {
+      endpoint: "https://api.workser.ai",
+      token: TOKEN,
+      home,
+      cwd: work,
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.code).toBe("needs_local_app");
+    expect(r.json.error.message).toMatch(/from this computer/);
+  });
+
+  it("scan runs with no daemon, no project and no login", async () => {
+    // The moment it is worth running is before anything has been published.
+    const r = await runCli(["--json", "scan", "--only", "permissions"], {
+      endpoint: "https://api.workser.ai",
+      token: TOKEN,
+      home,
+      cwd: work,
+    });
+    expect(r.code).toBe(0);
+    expect(r.json.data.checked).toContain("permissions");
+  });
+
+  it("scan names what it could not check rather than reporting it clean", async () => {
+    // An empty temp folder is not a git repository, so the secrets check
+    // cannot run. Saying "nothing found" here would be the worst possible
+    // output: a green result from a check that never happened.
+    const r = await runCli(["--json", "scan", "--only", "secrets"], {
+      endpoint: "https://api.workser.ai",
+      token: TOKEN,
+      home,
+      cwd: work,
+    });
+    expect(r.code).toBe(0);
+    expect(r.json.data.checked).toEqual([]);
+    expect(r.json.data.skipped[0].check).toBe("secrets");
+    expect(r.json.data.summary).toMatch(/Nothing could be checked/);
+  });
+
+  it("scan rejects a typo in --only instead of silently checking everything", async () => {
+    const r = await runCli(["--json", "scan", "--only", "secrest"], {
+      endpoint: "https://api.workser.ai",
+      token: TOKEN,
+      home,
+      cwd: work,
+    });
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.message).toMatch(/deps, secrets, permissions/);
+  });
+});
+
+describe("environments — one flag, four commands", () => {
+  it("deploy --env production is the same request as --prod", async () => {
+    await cli(["deploy", "--project", "p_1", "--env", "production"]);
+    expect((stub.lastRequest!.body as any).prod).toBe(true);
+    await cli(["deploy", "--project", "p_1"]);
+    expect((stub.lastRequest!.body as any).prod).toBe(false);
+  });
+
+  it("deploy refuses to guess when --prod and --env disagree", async () => {
+    // Someone believes one of the two things they typed. Picking one means
+    // half the time we ship to the environment they were avoiding.
+    const r = await cli(["deploy", "--project", "p_1", "--prod", "--env", "preview"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.message).toMatch(/ask for different things/);
+  });
+
+  it("deploy refuses development, and says why", async () => {
+    const r = await cli(["deploy", "--project", "p_1", "--env", "dev"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.message).toMatch(/Nothing is ever deployed to development/);
+  });
+
+  it("env set --env production scopes the write to that target only", async () => {
+    await cli(["env", "set", "API_KEY=x", "--project", "p_1", "--env", "production"]);
+    expect((stub.lastRequest!.body as any).vars[0].target).toEqual(["production"]);
+  });
+
+  it("env set with no --env still writes everywhere, as it always has", async () => {
+    // Narrowing this default would have un-set production for every existing
+    // script on the day it shipped.
+    await cli(["env", "set", "API_KEY=x", "--project", "p_1"]);
+    expect((stub.lastRequest!.body as any).vars[0].target).toBeUndefined();
+  });
+
+  it("logs --env passes the environment through and surfaces the note", async () => {
+    const r = await cli(["logs", "--project", "p_1", "--env", "preview"]);
+    expect(stub.lastRequest!.query.environment).toBe("preview");
+    expect(r.json.data.entries).toEqual([]);
+    // The whole point: "nothing deployed here" must not read as "all quiet".
+    expect(r.json.data.note).toMatch(/Nothing has been deployed/);
+  });
+
+  it("versions --env asks which environment `deployed` means", async () => {
+    await cli(["versions", "--project", "p_1", "--env", "prod"]);
+    expect(stub.lastRequest!.query.environment).toBe("production");
+  });
+});
+
+describe("urls and deployments", () => {
+  it("urls returns the stable hosts, never the per-deployment ones", async () => {
+    const r = await cli(["urls", "--project", "p_1"]);
+    expect(r.code).toBe(0);
+    const urls = r.json.data.rows.map((row: any) => row.url).filter(Boolean);
+    expect(urls).toContain("https://shop.example");
+    expect(urls.some((u: string) => u.includes("vercel.app"))).toBe(false);
+  });
+
+  it("urls says why an app has no address rather than leaving it blank", async () => {
+    const r = await cli(["urls", "--project", "p_1", "--app", "a_2"]);
+    const rows = r.json.data.rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row: any) => row.url === null)).toBe(true);
+    expect(rows[1].note).toMatch(/workser deploy --env production/);
+  });
+
+  it("deployments list filters by environment", async () => {
+    await cli(["deployments", "list", "--project", "p_1", "--env", "production"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/deployments");
+    expect(stub.lastRequest!.query.environment).toBe("production");
+  });
+
+  it("promote sends no version; rollback sends the one asked for", async () => {
+    await cli(["deployments", "promote", "--project", "p_1"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/deployments/promote");
+    expect((stub.lastRequest!.body as any).version).toBeUndefined();
+
+    await cli(["deployments", "rollback", "7", "--project", "p_1"]);
+    expect((stub.lastRequest!.body as any).version).toBe(7);
+  });
+
+  it("rollback refuses a commit sha rather than guessing a version", async () => {
+    const r = await cli(["deployments", "rollback", "abc123", "--project", "p_1"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.message).toMatch(/not a version number/);
+  });
+});
+
+describe("neon — the database, as an operator", () => {
+  it("branch list marks the one the app actually runs on", async () => {
+    const r = await cli(["neon", "branch", "list", "--project", "p_1"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/neon-branches");
+    // Six branch ids tell an operator nothing about which one they are about
+    // to reset. This flag is why the list is worth printing.
+    expect(r.json.data.find((b: any) => b.isProjectBranch).name).toBe("main");
+  });
+
+  it("branch create copies the branch in use unless told otherwise", async () => {
+    await cli(["neon", "branch", "create", "qa-run", "--project", "p_1"]);
+    expect((stub.lastRequest!.body as any)).toEqual({ name: "qa-run" });
+
+    await cli([
+      "neon", "branch", "create", "qa-run", "--project", "p_1",
+      "--from", "br_x", "--no-compute",
+    ]);
+    expect(stub.lastRequest!.body).toEqual({
+      name: "qa-run",
+      fromBranchId: "br_x",
+      withEndpoint: false,
+    });
+  });
+
+  it("branch reset and rm are their own calls, not one with a flag", async () => {
+    await cli(["neon", "branch", "reset", "br_qa", "--project", "p_1"]);
+    expect(stub.lastRequest!.method).toBe("POST");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/neon-branches/br_qa/reset");
+
+    await cli(["neon", "branch", "rm", "br_qa", "--project", "p_1"]);
+    expect(stub.lastRequest!.method).toBe("DELETE");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/neon-branches/br_qa");
+  });
+
+  it("database list scopes to a branch when asked", async () => {
+    await cli(["neon", "database", "list", "--project", "p_1", "--branch", "br_qa"]);
+    expect(stub.lastRequest!.query.branchId).toBe("br_qa");
+  });
+
+  it("endpoints answers the cost question", async () => {
+    const r = await cli(["neon", "endpoints", "--project", "p_1"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/neon-endpoints");
+    // `idle` costs nothing, `active` bills. Neon's own word, kept.
+    expect(r.json.data[0].current_state).toBe("idle");
+  });
+});
+
+describe("env values that differ per environment", () => {
+  it("env list --env asks for that environment's values", async () => {
+    const r = await cli(["env", "list", "--project", "p_1", "--env", "production"]);
+    expect(stub.lastRequest!.query.environment).toBe("production");
+    expect(r.json.data).toHaveLength(1);
+  });
+
+  it("the un-scoped list says WHERE a key differs, without showing the value", async () => {
+    // The whole reason the plain list is still worth reading: one table, and
+    // you can see production is not the same.
+    const r = await cli(["env", "list", "--project", "p_1"]);
+    expect(stub.lastRequest!.query.environment).toBeUndefined();
+    const key = r.json.data.find((v: any) => v.key === "API_KEY");
+    expect(key.overriddenIn).toEqual(["production"]);
+  });
+
+  it("env get --env reads that environment's value", async () => {
+    await cli(["env", "get", "API_KEY", "--project", "p_1", "--env", "prod"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/env/API_KEY");
+    expect(stub.lastRequest!.query.environment).toBe("production");
+  });
+
+  it("no --env still means the shared value, as it always has", async () => {
+    await cli(["env", "get", "API_KEY", "--project", "p_1"]);
+    expect(stub.lastRequest!.query.environment).toBeUndefined();
+  });
+
+  it("--env and --app travel together rather than one replacing the other", async () => {
+    await cli([
+      "env", "list", "--project", "p_1", "--app", "a_1", "--env", "preview",
+    ]);
+    expect(stub.lastRequest!.query.webAppId).toBe("a_1");
+    expect(stub.lastRequest!.query.environment).toBe("preview");
+  });
+});
+
+describe("usage", () => {
+  it("usage → GET /v1/projects/:id/usage, and fails on a hard cap", async () => {
+    const r = await cli(["usage", "--project", "p_1"]);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/usage");
+    // Projects 2 of 2 is a HARD cap — the next one would be refused, and a
+    // step that plans to add one should not pass.
+    expect(r.code).not.toBe(0);
+  });
+
+  it("an unread figure comes back as null, not zero", async () => {
+    // The whole point. "0 GB of 10" would tell someone they have room when
+    // nobody looked.
+    const r = await cli(["usage", "--project", "p_1"]);
+    const files = r.json.data.dimensions.find((d: any) => d.id === "file_storage_gb");
+    expect(files.used).toBeNull();
+    expect(files.note).toMatch(/could not be read/);
+  });
+});
+
+describe("env pull fills without clobbering", () => {
+  it("leaves a value this computer already has, and names it", async () => {
+    // A developer's local DATABASE_URL points at their own database on
+    // purpose. Replacing it because they asked to pull a missing key destroys
+    // work this app cannot give back.
+    const folder = realpathSync(mkdtempSync(join(tmpdir(), "workser-pull-")));
+    writeFileSync(
+      join(folder, ".env.local"),
+      "# mine\nAPI_KEY=my-own-local-key\n",
+    );
+
+    const r = await cli(["env", "pull", "--project", "p_1"], { cwd: folder });
+    expect(r.code).toBe(0);
+    expect(r.json.data.skipped).toContain("API_KEY");
+
+    const after = readFileSync(join(folder, ".env.local"), "utf8");
+    expect(after).toContain("API_KEY=my-own-local-key");
+    // Comments survive, and the key it did not have is added.
+    expect(after).toContain("# mine");
+    expect(after).toContain("NODE_ENV=");
+  });
+
+  it("--overwrite replaces them, and counts them as pulled", async () => {
+    const folder = realpathSync(mkdtempSync(join(tmpdir(), "workser-pull2-")));
+    writeFileSync(join(folder, ".env.local"), "API_KEY=my-own-local-key\n");
+
+    const r = await cli(["env", "pull", "--project", "p_1", "--overwrite"], {
+      cwd: folder,
+    });
+    expect(r.json.data.skipped).toEqual([]);
+    // Replaced in place still counts as pulled — otherwise --overwrite reports
+    // "pulled 0" having just rewritten the file.
+    expect(r.json.data.pulled).toContain("API_KEY");
+    expect(readFileSync(join(folder, ".env.local"), "utf8")).not.toContain(
+      "my-own-local-key",
+    );
+  });
+
+  it("pulls the environment you asked for", async () => {
+    const folder = realpathSync(mkdtempSync(join(tmpdir(), "workser-pull3-")));
+    await cli(["env", "pull", "--project", "p_1", "--env", "production"], {
+      cwd: folder,
+    });
+    expect(stub.lastRequest!.query.environment).toBe("production");
   });
 });

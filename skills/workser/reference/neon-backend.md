@@ -1,18 +1,31 @@
 ---
 topic: neon
-title: The project's own Neon backend
-summary: Neon-branch object storage and functions. Dedicated tenancy only.
+title: The project's own database
+summary: Branches, databases, compute, plus Neon-branch object storage and functions. Dedicated tenancy only.
 commands: [neon]
 ---
 
-# The project's own Neon backend
+# The project's own database
 
-S3-compatible object storage and Node.js HTTP functions on the project's own Neon
-branch — they branch with the database. **Additive** infrastructure, not a
-replacement for `workser storage`.
+The project's database, run the way an operator runs one: branches (copies of
+the data), the databases on them, and the compute that serves them. Plus
+S3-compatible object storage and Node.js HTTP functions on the same branch.
 
 ```
 workser neon status                       # tenancy + toggles + region verdict
+
+workser neon branch list                  # copies of the data; the live one is marked
+workser neon branch create qa-run         # a copy to work on, made in a second
+workser neon branch create qa --from <id> --no-compute
+workser neon branch reset <branchId>      # throw its changes away (asks the owner)
+workser neon branch rm <branchId>         # delete it and its data (asks the owner)
+
+workser neon database list [--branch <id>]
+workser neon database create <name> [--branch <id>] [--owner <role>]
+workser neon database rm <name> [--branch <id>]   # asks the owner
+
+workser neon endpoints                    # what compute is running, and idle
+
 workser neon storage list | create <name> | rm <bucket>
 workser neon storage ls <bucket> [prefix]
 workser neon storage put <bucket> <local> [key]
@@ -30,6 +43,24 @@ Region is fixed when the project is created. `regionSupportsNeonBackend: false` 
 **final, not retryable** — no amount of waiting or retrying changes it. When you see
 it, say so plainly and fall back to `workser storage` (the default bucket).
 
+## Branches are the useful one
+
+A branch is a **full copy of the data**, made in about a second, costing almost
+nothing until something writes to it. That is what lets a check run against real
+data without being able to damage it — give a QA step its own branch instead of
+pointing it at the live database.
+
+Two things cannot happen at all, whatever anyone approves: **the branch the app
+runs on cannot be deleted or reset**, and neither can **the database it connects
+to**. Those refusals come from the server, not from the approval prompt. If you
+meant to reset a copy and got that message, you named the live one.
+
+`reset` deletes nothing by name and destroys just as much: it replaces a
+branch's contents with its source's. It asks the owner for exactly that reason.
+
+`--no-compute` makes a branch with no compute. It is cheaper and **nothing can
+connect to it** — useful as a snapshot, useless as somewhere to run tests.
+
 ## Notes that matter
 
 - **`neon storage rm <bucket>` deletes the bucket and everything in it.** Not
@@ -38,5 +69,8 @@ it, say so plainly and fall back to `workser storage` (the default bucket).
   through Workser.
 - **Functions deploy from a zip.** Build the bundle first, then
   `workser neon functions deploy <slug> <zip>`.
-- **Most apps don't need this.** If the user just wants to store uploads, the default
-  bucket in `reference/storage.md` is the answer.
+- **`neon endpoints` is the cost question.** `active` means it is billing;
+  `idle` means it is not. It is the only place in the product that answers "what
+  is this database costing me while nothing is happening".
+- **Most apps never need the storage or functions half.** If the user just wants
+  to store uploads, the default bucket in `reference/storage.md` is the answer.

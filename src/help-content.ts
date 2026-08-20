@@ -19,6 +19,141 @@ export interface HelpTopic {
 
 export const HELP_TOPICS: readonly HelpTopic[] = [
   {
+    topic: "analysis",
+    title: "Analysis — running Python on this project's data",
+    summary: "Run pandas locally under a sandbox and a clock, so the code, the output and the timing land in the task where the owner can see them.",
+    commands: ["analysis"],
+    source: "skills/workser/reference/analysis.md",
+    body: `# Analysis — running Python on this project's data
+
+\`\`\`
+workser analysis runtime [--app <webAppId>]
+workser analysis run --app <webAppId> --file report.py [--timeout <ms>]
+workser analysis run --app <webAppId> --code 'print(1)'
+\`\`\`
+
+## Why not just run \`python\` yourself
+
+Two reasons, and the second matters more.
+
+It runs inside the same OS sandbox a structured agent run gets, scoped to the
+app's own folder — so a script that goes wrong goes wrong in one directory.
+
+And it is **recorded**. The code, the output and how long it took land in the
+task, where the owner can see them. An analysis nobody can see is an assertion,
+which is the same problem \`workser api call\` solves for a service with no
+screen. If a number is going to end up in front of the customer, run it here.
+
+## Check the runtime before you write the script
+
+\`\`\`
+workser analysis runtime --app <id> --json
+\`\`\`
+
+It reports the interpreter that would be used — the app's own \`.venv\` first, if
+it has one — and whether \`pandas\` and \`matplotlib\` are importable. Exit code is
+non-zero when Python is missing, so you find out in a second rather than after
+writing a hundred lines.
+
+## Limits, said plainly
+
+Five minutes by default, fifteen at most. Output is capped per stream and
+truncation is reported. Nothing is silently dropped.
+
+These are local limits and they are the right ones: this work does **not** go in
+a deployed function. \`maxDuration\` is for a slow request; an analysis reads a lot
+of rows and takes as long as it takes, so putting it behind a serverless timeout
+means the useful analyses are exactly the ones that fail.
+
+## What counts as evidence
+
+A number on its own is not a finding. When you report a result, say what the
+query was, how many rows it covered, and what window of time — a figure with no
+denominator is the easiest thing in this product to get wrong and the hardest
+for the owner to check.
+`,
+  },
+  {
+    topic: "api",
+    title: "Services — calling one, and describing it",
+    summary: "Call this project's API through the same console the owner sees, and make sure every route it serves is written down before you call the task done.",
+    commands: ["api"],
+    source: "skills/workser/reference/api.md",
+    body: `# Services — calling one, and describing it
+
+A service has no screen. Everything else you build can be looked at; an API can
+only be *called* — so unless the calls go somewhere the owner can see, "the API
+works" is an assertion with nothing behind it.
+
+\`\`\`
+workser api list  [--app <webAppId>]
+workser api call <path> [--app <id>] [--method <verb>] [--body <text>]
+                        [--header 'Name: value'] [--env local|preview|production]
+workser api spec  [--check]
+\`\`\`
+
+## Call it through the console, not through curl
+
+\`workser api call\` goes through the same request console the owner has open. The
+status, the timing and the body you see are the ones they see, and the
+credentials come from the app's own environment rather than from your command
+line — so a token never lands in a transcript.
+
+\`\`\`
+workser api call /orders --app <id> --json
+workser api call /orders --app <id> --method POST --body '{"item":"latte"}' --json
+\`\`\`
+
+\`--env\` picks which copy to call. \`local\` is the dev server on this machine and
+is the default; \`preview\` and \`production\` are the deployments. The host always
+comes from that choice — a path is a path, never a URL, and passing one is
+refused.
+
+Exit code: non-zero only when nothing answered. A 404 or a 422 is a *successful*
+call with an informative answer, so checking that a route correctly rejects bad
+input works exactly as you would expect.
+
+## Save the calls that matter
+
+Requests saved at \`api/requests.json\` in the service's repo show up in the
+owner's console. Write the handful that describe what the service does — not a
+test suite:
+
+\`\`\`json
+[
+  { "id": "list-orders", "name": "List today's orders", "method": "GET",
+    "path": "/api/orders", "note": "What the shop screen loads." },
+  { "id": "place-order", "name": "Place an order", "method": "POST",
+    "path": "/api/orders", "body": "{\\"item\\":\\"latte\\"}" }
+]
+\`\`\`
+
+They are in the repo on purpose: a call worth saving outlives the session that
+saved it, and it shows up in the diff.
+
+## Describe every route before you call it done
+
+\`\`\`
+workser api spec --check
+\`\`\`
+
+It compares the routes the repo actually serves — read from the file layout, so
+it cannot be fooled by a comment — with the paths your OpenAPI document
+declares, and fails when one is missing. Write the document at
+\`api/openapi.json\` (YAML also works).
+
+It is not an OpenAPI validator and does not check schemas or responses. It asks
+one question, so that it is cheap enough to run every time: is every route
+written down. A health probe is exempt. A path in the spec that the repo does
+not serve is reported but does not fail — you may be documenting something
+built next.
+
+Run it alongside \`workser verify\` before declaring an API task finished. An API
+somebody can call and an API somebody can integrate with are different products,
+and the spec is the difference.
+`,
+  },
+  {
     topic: "automation",
     title: "Workflows & connected apps",
     summary: "Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.",
@@ -133,6 +268,39 @@ other surface the brand feeds.
 
 For generating artwork *in* the brand's palette, see \`workser help images\` —
 put the colours from \`design show\` into the prompt.
+
+## The three places design lives — and which one you are in
+
+They are separate on purpose, and confusing them is the commonest mistake here.
+
+| What | Scope | Where |
+| --- | --- | --- |
+| **Brand** — colours, fonts, logo | The **project** | \`business_settings\`, read with \`design show\` |
+| **Design files** — the \`.fig\` work | The **project**, many files | the project's design workspace folder |
+| **Layout options** — choices to show the owner | **One app** | \`design/options.json\` in that app's folder |
+
+**Design is not an app.** It has no port, no URL, nothing to deploy. Never create
+an app for it.
+
+When you write \`design/options.json\`, put the design file each option came from
+in a \`source\` field:
+
+\`\`\`json
+{ "options": [
+  { "id": "warm", "name": "Warm and simple", "route": "/",
+    "note": "Bigger type, more space.", "source": "hero-v2.fig" }
+] }
+\`\`\`
+
+\`source\` is a path **inside the project's design workspace** — relative, no
+\`..\`, no absolute paths, no URLs. Anything else is dropped. Leave it out when the
+option was written straight into code with no design file behind it; that is an
+ordinary case and inventing a source is worse than omitting one.
+
+Why it matters: the owner picks an option in one app and later opens the design
+workspace. Without \`source\`, nothing connects the decision they just made to the
+file it came from, and "why does the site look like this?" has three unrelated
+answers.
 `,
   },
   {
@@ -185,6 +353,77 @@ copy is the current one.
 \`workser business\` is how **you** inspect and fix data while building. The app reads
 the same records at runtime through \`workser.business\` in \`@workser/app\` — see the
 \`workser-sdk\` skill. An app shelling out to this CLI per request is wrong.
+`,
+  },
+  {
+    topic: "checks",
+    title: "Checks — is it safe, and is it still up",
+    summary: "Scan the code for leaked secrets, known-bad dependencies and over-broad permissions, and check that what you published is still answering.",
+    commands: ["scan","health"],
+    source: "skills/workser/reference/checks.md",
+    body: `# Checks — is it safe, and is it still up
+
+Two questions nothing else in this CLI asks. \`verify\` tells you the code
+compiles. These tell you it is not dangerous, and that it is still working an
+hour after you shipped it.
+
+Run both before you say a task is done.
+
+\`\`\`
+workser scan                      # deps · secrets · permissions, over this folder
+workser scan --check              # same, but exits non-zero on anything serious
+workser scan --only secrets       # one check: deps, secrets, permissions
+workser scan --staged             # look at staged changes only
+
+workser health                    # is every published app still answering?
+workser health --app <webAppId>   # just one
+\`\`\`
+
+## scan
+
+Three checks, all local — no login, no project, no network except for \`deps\`.
+
+**secrets** looks at what your changes ADD (\`git diff HEAD\`), not at the whole
+tree, so it fires on the key you just wrote rather than on every example file
+forever. It knows the shapes that are actually credentials — AWS, GitHub,
+Stripe, OpenAI, Anthropic, Google, Slack, private keys, database URLs with a
+password in them, and \`API_KEY = "…"\` with something real on the right. It
+ignores placeholders (\`your-api-key\`, \`process.env.X\`, \`<REPLACE_ME>\`) and
+example, fixture and lockfile paths.
+
+**deps** runs \`npm audit\` and reports high and critical only. Moderate and low
+advisories on transitive dev dependencies are real and are not worth a report
+nobody finishes reading.
+
+**permissions** catches three specific mistakes: a \`NEXT_PUBLIC_…SECRET\`
+compiled into the browser bundle, an API that accepts credentialed requests
+from any website, and a real \`.env\` committed to the repository.
+
+**A check that could not run says so.** Offline, \`deps\` reports "not checked"
+with the reason — never "nothing found". If you are quoting a scan result, quote
+what it checked as well as what it found.
+
+If it finds a secret: move the value to \`workser env set\`, and treat the old one
+as leaked. Rotating it is the owner's decision, not yours — say so and let them.
+
+## health
+
+Probes the stable preview and production addresses of every app in the project
+and reports up or down, with the round trip. It exits non-zero if anything is
+down, so a step can gate on it.
+
+Two things worth knowing:
+
+* It is the same check the desktop runs on a timer. Both fold into one streak,
+  so a run of yours counts toward the same total.
+* After three failed checks in a row on a **production** address that has
+  worked before, an incident task is opened on the owner's board automatically.
+  A preview address is checked and reported but never escalated — it is not
+  customer-facing, and waking the owner for it teaches them to ignore the ones
+  that are.
+
+An app that has never been published has no address, so there is nothing to
+check. That is reported as a note, not as a pass.
 `,
   },
   {
@@ -279,6 +518,7 @@ them.
 \`\`\`
 workser artifact add <path> [--kind <k>] [-d <text>]  # record a finished deliverable
 workser artifact add --url <url> --kind app           # record a deployed app
+workser artifact add <path> --kind <shape> --data <json> [--promote]
 workser artifact run                                  # which task you're attached to
 
 workser ask "<question>" [--type <t>] [--option <o>]  # ask the user, WAIT for the answer
@@ -304,6 +544,43 @@ are detected automatically); pass it explicitly for \`app\` / \`url\`.
 
 To publish an app: \`workser deploy\` (preview) or \`workser deploy --prod\` (live), then
 register the URL it returns as an \`app\` artifact so the user can open it from the task.
+
+## The shapes the task draws as cards
+
+Most kinds say what kind of FILE something is. A few say what the user **asked
+for**, and those get a card of their own on the task:
+
+| \`--kind\` | What the card shows | \`--data\` it reads |
+|---|---|---|
+| \`report\` | the chart behind a number | — |
+| \`walkthrough\` | the flow, as frames | \`frames\` |
+| \`before_after\` | a wipe between two pictures | \`shots: [{url,label}, …]\` |
+| \`checks\` | what was tested | \`passed\`, \`total\` |
+| \`web_app\` | a published app | \`deployedAt\`, \`pagesChanged\` |
+| \`service\` | a job and what it reaches | \`nextRun\` |
+| \`design\` | a layout | — |
+
+\`\`\`
+workser artifact add ./checks.json --kind checks --data '{"passed":12,"total":12}'
+workser artifact add --url https://acme.workser.app --kind web_app \\
+  --data '{"deployedAt":"2026-08-20T14:02:00Z","pagesChanged":3}'
+\`\`\`
+
+**Every \`--data\` field is optional, and a missing one is left off the card — it
+is never drawn as zero.** \`0 pages changed\` is a claim you cannot support and
+reads as "it did nothing"; saying nothing reads as "not measured", which is
+true. Only pass a figure you actually counted.
+
+## Handing something up to the task
+
+\`--promote\` marks an artifact as one of the things the user asked for, so it
+appears on the task itself instead of inside your step.
+
+Use it when you know: the report they wanted, the app you published, the
+document explaining what changed. Do **not** promote working material —
+screenshots you took to check your own work, intermediate exports, a scratch
+file. A task that hands up everything buries the six things they wanted under
+sixty they did not.
 
 ## Ask the user something (and get an answer back)
 
@@ -333,42 +610,62 @@ without you ever seeing it).
   },
   {
     topic: "deploy",
-    title: "Deploy, environment variables & logs",
-    summary: "Ship the app, configure it, and find out why it is down.",
-    commands: ["deploy","env","logs","versions","domain","open","verify"],
+    title: "Deploy, addresses & logs",
+    summary: "Ship the app, find its address, and find out why it is down.",
+    commands: ["deploy","logs","versions","urls","deployments","domain","open","verify"],
     source: "skills/workser/reference/deploy.md",
     body: `# Deploy, environment variables & logs
 
 Getting the app online and configured, and finding out why it isn't.
 
 \`\`\`
-workser deploy [--prod] [--watch]   # deploy (git → Vercel); --watch waits for live URL
+workser deploy [--env production] [--watch]   # deploy (git → Vercel); default is preview
 workser deploy status [id]          # status of a deploy (default: latest)
-workser logs [-n 100] [-f]          # recent logs
-workser versions                    # deploy history
-workser domain list                 # custom domains (read)
+workser urls                        # every app's stable preview + live address
+workser logs [-n 100] [-f] [--env production] [--app <id>]
+workser versions [--env production] # history; the badge says which env is live
+workser deployments list [--env production] [--app <id>]
+workser deployments inspect <id> [--logs]
+workser deployments promote         # ship the latest build (the owner confirms)
+workser deployments rollback <version>  # put an earlier one back (the owner confirms)
+workser domain list                 # custom domains
+workser domain add shop.co.th       # attach one (the owner confirms)
+workser domain add app.shop.co.th --app <webAppId>
+workser domain rm shop.co.th        # detach one (the owner confirms)
 workser open                        # open the live app
 workser verify                      # run typecheck/lint/build
 
-workser env set KEY=VALUE [K2=V2…]  # set env vars
-workser env list                    # list keys (values masked)
-workser env get KEY                 # one value (sensitive)
 \`\`\`
+
+Settings — \`workser env\` — are their own topic: \`workser help env\`.
 
 ## Notes that matter
 
 - **\`verify\` gates "done".** Run \`workser verify --json\` before you say a task is
   finished. \`"ok": false\` means fix the listed errors and re-run — a green build is
   the bar, not your reading of the diff.
-- **\`deploy\` without \`--prod\` is a preview.** Preview first when the change is
-  risky; \`--prod\` puts it in front of real users.
+- **\`deploy\` without \`--env\` is a preview.** Preview first when the change is
+  risky; \`--env production\` (or the older \`--prod\`, which means the same) puts it
+  in front of real users. Passing both, disagreeing, is refused rather than
+  resolved.
+- **\`urls\` is where the address comes from — not the deploy response.** The host
+  in a deploy response is per-build and the next deploy retires it. \`urls\`
+  returns the stable ones, and says why an app has none rather than printing a
+  blank.
+- **\`promote\` and \`rollback\` are the same upstream call and two commands on
+  purpose.** Promote ships the newest build; rollback puts version N back. Both
+  ask the owner and return exit 7 (\`awaiting_approval\`) until they answer — and
+  that gate holds even on a "just do it" run.
+- **There is no \`deployments cancel\`.** Nothing upstream can stop a build that is
+  already running. Wait for it and then promote or roll back.
 - **\`--watch\` blocks until there's a live URL.** Without it you get a deploy id and
   have to poll \`deploy status\`.
-- **\`env set\` writes a value you never see.** That's the point — when the user has
-  a secret, have them run it (or set it in Orbit) rather than pasting it to you.
-- **\`env get\` returns a secret.** Don't echo it into the conversation.
-- **\`env rm\` and \`domain set\` are owner-only** (exit 6). Tell the user to do it in
-  Orbit; don't look for a workaround.
+- **\`domain add\` and \`domain rm\` ask the owner to confirm** and return exit 7
+  (\`awaiting_approval\`) until they do — tell them to approve, then retry the same
+  command. Domains Workser owns (\`workser.ai\` and its subdomains) and hostnames
+  the hosting provider assigns (\`*.vercel.app\`) are refused outright: those are
+  not attachable, and the app's own preview and live URLs already exist without
+  attaching anything.
 
 ## After a successful deploy
 
@@ -379,13 +676,178 @@ workser artifact add --url https://acme.workser.app --kind app -t "Storefront"
 \`\`\`
 
 See \`reference/deliverables.md\`.
+`,
+  },
+  {
+    topic: "docs",
+    title: "Project documents",
+    summary: "Write and revise the project's pages, keep the markdown mirror readable, and put the diagram in the document rather than in your reply.",
+    commands: ["doc"],
+    source: "skills/workser/reference/docs.md",
+    body: `# Project documents
 
-## Local vs cloud environment
+A document is a page in the project's Docs panel and a git-tracked markdown
+mirror at \`.workser/docs/<id>.md\`. Both are the same document: the panel renders
+the rich text, the mirror is what you, git and the next agent can read as text.
 
-\`env set\` configures the **cloud** environment (production and preview). The \`.env\`
-files in the app folder configure **this computer** — the user edits those in Orbit
-under Settings → "On this computer", and saving there restarts the dev server. Don't
-hand-edit \`.env.local\` to change cloud behaviour; they are different environments.
+\`\`\`
+workser doc list [--work-item <id>]
+workser doc show <id> [--markdown]
+workser doc create <title> [--work-item <id>] [--markdown <text>]
+                            [--content-json <json>]
+workser doc update <id> [--title <text>] [--markdown <text>]
+workser doc diagram <id> [--check]
+\`\`\`
+
+## Revise the page that exists
+
+The project outlives your session, and a second copy of a page is worse than no
+page — nobody can tell which one is current.
+
+\`\`\`
+workser doc list --json                       # is there already a page for this?
+workser doc update <id> --markdown "$(cat updated.md)"
+\`\`\`
+
+\`workser doc show <id> --markdown\` reports the mirror's path so you can open the
+file with your normal tools instead of reconstructing prose from blocks.
+
+\`--work-item <id>\` links a document to a Board card (a card has at most one). A
+linked document renders on its card and is *hidden* from the Docs panel, so a
+plan spanning several phases should stay unlinked — it belongs to the project,
+not to phase 1.
+
+## Put the diagram in the document
+
+A page explaining how something fits together should contain the picture, not a
+paragraph describing one. Write it as a \`\`\`mermaid fence in the markdown: the
+Docs panel renders it, \`git diff\` shows it as changed lines, and the next agent
+reads it without a screenshot.
+
+\`\`\`
+workser doc diagram <id> --check     # exits non-zero when the page has none
+\`\`\`
+
+Use \`--check\` on any page whose job is to explain a structure — an architecture
+page, a data model, a flow. It reads the mirror on disk rather than the block
+content, which is deliberate: a diagram that exists in the editor but not in the
+mirror is invisible to git, to you, and to whoever opens the file next.
+`,
+  },
+  {
+    topic: "env",
+    title: "Settings — cloud, per environment, and on this computer",
+    summary: "Set and read an app's settings, hold a different value in production, and pull them onto this computer without clobbering local ones.",
+    commands: ["env"],
+    source: "skills/workser/reference/env.md",
+    body: `# Settings — cloud, per environment, and on this computer
+
+\`\`\`
+workser env set KEY=VALUE [K2=V2…] [--env production]
+workser env list [--env production]      # keys, masked; marks where they differ
+workser env get KEY [--env production]   # one value (sensitive)
+workser env pull [--env production] [--overwrite]
+\`\`\`
+
+## \`--env\` — say which environment you mean
+
+\`deploy\`, \`logs\` and \`versions\` take \`--env preview\` or \`--env production\`.
+\`env set\` takes those and \`--env development\` as well.
+
+Without it: \`deploy\` builds a preview, \`logs\` and \`versions\` talk about
+whichever deployment is newest, and \`env set\` writes to all three environments.
+Those are the old defaults and they have not changed.
+
+**There is no development deployment.** Nothing is ever built into it — it is
+the environment the app uses when it runs on this computer — so \`deploy --env
+development\` and \`logs --env development\` are refused rather than quietly shown
+preview.
+
+**A key can now hold a different value per environment.** \`env set --env
+production DATABASE_URL=…\` writes an override; every other environment keeps
+the shared value. \`env list --env production\` and \`env get KEY --env production\`
+read it back.
+
+Without \`--env\` you get the **shared** value — what the key is everywhere unless
+overridden — and \`env list\` marks which keys differ:
+
+\`\`\`
+API_KEY = sk-•••   (different in production)
+\`\`\`
+
+That marker is the one to read before changing anything: editing the shared
+value will not touch production if production has its own.
+
+\`env rm KEY --env production\` removes just that override and the key keeps its
+shared value. \`env rm KEY\` removes the key entirely.
+
+## Local settings are this computer's, and are not overwritten
+
+\`env pull\` writes into the app folder's own env file — \`.env\` for most runtimes,
+\`.env.local\` for Next.js, because that is the file each one actually reads.
+
+**It fills in what is missing and leaves what is already there alone.** A local
+\`DATABASE_URL\` usually points at the developer's own database on purpose;
+replacing it because somebody asked to pull one missing key destroys work
+Workser cannot give back. Keys it left alone are **named** in the output.
+
+\`\`\`
+workser env pull                    # fill the gaps, touch nothing else
+workser env pull --env production   # fill them from production's values
+workser env pull --overwrite        # replace local values too
+\`\`\`
+
+Starting an app for the first time does the same thing automatically, with the
+same rule.
+
+## A key can hold a different value per environment
+
+\`workser env set --env production DATABASE_URL=…\` writes an override; every
+other environment keeps the shared value.
+
+Without \`--env\` you get the **shared** value — what the key is everywhere unless
+overridden — and \`env list\` marks which keys differ:
+
+\`\`\`
+API_KEY = sk-•••   (different in production)
+\`\`\`
+
+Read that marker before changing anything: editing the shared value will not
+touch production if production has its own.
+
+\`env rm KEY --env production\` removes just that override and the key keeps its
+shared value. \`env rm KEY\` removes the key entirely.
+
+## Local settings are this computer's, and are not overwritten
+
+\`env pull\` writes into the app folder's own env file — \`.env\` for most runtimes,
+\`.env.local\` for Next.js, because that is the file each one actually reads.
+
+**It fills in what is missing and leaves what is already there alone.** A local
+\`DATABASE_URL\` usually points at the developer's own database on purpose;
+replacing it because somebody asked to pull one missing key destroys work
+Workser cannot give back. Keys it left alone are **named** in the output.
+
+\`\`\`
+workser env pull                    # fill the gaps, touch nothing else
+workser env pull --env production   # fill them from production's values
+workser env pull --overwrite        # replace local values too
+\`\`\`
+
+Starting an app for the first time does the same thing automatically, with the
+same rule.
+
+## Notes that matter
+
+- **\`env set\` writes a value you never see.** That's the point — when the user
+  has a secret, have them run it (or set it in Orbit) rather than pasting it to
+  you.
+- **\`env get\` returns a secret.** Don't echo it into the conversation.
+- **\`env rm\` is owner-only** (exit 6). Tell the user to do it in Orbit; don't
+  look for a workaround.
+- **Cloud and local are different environments.** \`env set\` configures the
+  cloud; the files in the app folder configure this computer. Don't hand-edit
+  one to change the other.
 `,
   },
   {
@@ -461,18 +923,31 @@ can \`memory search\` and find it.
   },
   {
     topic: "neon",
-    title: "The project's own Neon backend",
-    summary: "Neon-branch object storage and functions. Dedicated tenancy only.",
+    title: "The project's own database",
+    summary: "Branches, databases, compute, plus Neon-branch object storage and functions. Dedicated tenancy only.",
     commands: ["neon"],
     source: "skills/workser/reference/neon-backend.md",
-    body: `# The project's own Neon backend
+    body: `# The project's own database
 
-S3-compatible object storage and Node.js HTTP functions on the project's own Neon
-branch — they branch with the database. **Additive** infrastructure, not a
-replacement for \`workser storage\`.
+The project's database, run the way an operator runs one: branches (copies of
+the data), the databases on them, and the compute that serves them. Plus
+S3-compatible object storage and Node.js HTTP functions on the same branch.
 
 \`\`\`
 workser neon status                       # tenancy + toggles + region verdict
+
+workser neon branch list                  # copies of the data; the live one is marked
+workser neon branch create qa-run         # a copy to work on, made in a second
+workser neon branch create qa --from <id> --no-compute
+workser neon branch reset <branchId>      # throw its changes away (asks the owner)
+workser neon branch rm <branchId>         # delete it and its data (asks the owner)
+
+workser neon database list [--branch <id>]
+workser neon database create <name> [--branch <id>] [--owner <role>]
+workser neon database rm <name> [--branch <id>]   # asks the owner
+
+workser neon endpoints                    # what compute is running, and idle
+
 workser neon storage list | create <name> | rm <bucket>
 workser neon storage ls <bucket> [prefix]
 workser neon storage put <bucket> <local> [key]
@@ -490,6 +965,24 @@ Region is fixed when the project is created. \`regionSupportsNeonBackend: false\
 **final, not retryable** — no amount of waiting or retrying changes it. When you see
 it, say so plainly and fall back to \`workser storage\` (the default bucket).
 
+## Branches are the useful one
+
+A branch is a **full copy of the data**, made in about a second, costing almost
+nothing until something writes to it. That is what lets a check run against real
+data without being able to damage it — give a QA step its own branch instead of
+pointing it at the live database.
+
+Two things cannot happen at all, whatever anyone approves: **the branch the app
+runs on cannot be deleted or reset**, and neither can **the database it connects
+to**. Those refusals come from the server, not from the approval prompt. If you
+meant to reset a copy and got that message, you named the live one.
+
+\`reset\` deletes nothing by name and destroys just as much: it replaces a
+branch's contents with its source's. It asks the owner for exactly that reason.
+
+\`--no-compute\` makes a branch with no compute. It is cheaper and **nothing can
+connect to it** — useful as a snapshot, useless as somewhere to run tests.
+
 ## Notes that matter
 
 - **\`neon storage rm <bucket>\` deletes the bucket and everything in it.** Not
@@ -498,8 +991,11 @@ it, say so plainly and fall back to \`workser storage\` (the default bucket).
   through Workser.
 - **Functions deploy from a zip.** Build the bundle first, then
   \`workser neon functions deploy <slug> <zip>\`.
-- **Most apps don't need this.** If the user just wants to store uploads, the default
-  bucket in \`reference/storage.md\` is the answer.
+- **\`neon endpoints\` is the cost question.** \`active\` means it is billing;
+  \`idle\` means it is not. It is the only place in the product that answers "what
+  is this database costing me while nothing is happening".
+- **Most apps never need the storage or functions half.** If the user just wants
+  to store uploads, the default bucket in \`reference/storage.md\` is the answer.
 `,
   },
   {
@@ -552,16 +1048,16 @@ real scope, not just a repeat of the task.
   },
   {
     topic: "sdlc-entities",
-    title: "Board cards, decisions, requirements, and docs",
+    title: "Board cards, decisions and requirements",
     summary: "Read what this project already tracks and decided, keep the Board honest as you work, and record what a future maintainer will need.",
-    commands: ["board","decision","requirement","doc"],
+    commands: ["board","decision","requirement"],
     source: "skills/workser/reference/sdlc-entities.md",
-    body: `# Board cards, decisions, requirements, and docs
+    body: `# Board cards, decisions and requirements
 
 These are the project's memory across sessions. They write to the **same tables**
-the Orbit desktop's Board, Project Memory, and Docs panels use, so anything here
-appears there too — and (when this CLI runs inside an Orbit-spawned agent run)
-as an inline card in the conversation you're working in.
+the Orbit desktop's Board and Project Memory panels use, so anything here appears
+there too — and, inside an Orbit-spawned run, as an inline card in the
+conversation. Documents have their own guide: \`workser help docs\`.
 
 \`\`\`
 workser board list [--status <value>] [--label <value>] [--limit <n>]
@@ -584,11 +1080,6 @@ workser requirement show <id>
 workser requirement create <title> --body <text> [--status <text>]
 workser requirement update <id> [--title <text>] [--body <text>] [--status <text>]
 
-workser doc list [--work-item <id>]
-workser doc show <id> [--markdown]
-workser doc create <title> [--work-item <id>] [--markdown <text>]
-                            [--content-json <json>]
-workser doc update <id> [--title <text>] [--markdown <text>]
 \`\`\`
 
 ## Read first — this is the part that matters
@@ -617,7 +1108,6 @@ workser board create "Phase 1 — schema + migration" \\
   --description "Add orders/line_items tables and the migration." \\
   --status in-progress --json
 workser board create "Phase 2 — checkout API" --description "…" --json
-workser board create "Phase 3 — cart UI"      --description "…" --json
 
 # the plan itself, ONE doc, deliberately NOT linked to a card
 workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
@@ -627,8 +1117,8 @@ workser decision create "Carts live server-side" --context "…" --decision "…
 \`\`\`
 
 **Don't pass \`--work-item\` for a multi-phase plan.** A linked document renders on
-its card and is *hidden* from the Docs panel; a plan spanning three phases belongs
-to the project, not to phase 1.
+its card and is *hidden* from the Docs panel; a plan spanning three phases
+belongs to the project, not to phase 1.
 
 The bar: if the user closed this conversation now, the Board should still show
 what's left and the doc should still explain the plan to whoever continues it.
@@ -654,22 +1144,19 @@ workser board create "Fix the login bug" --status in-progress --priority high \\
 \`\`\`
 
 \`board update\` replaces the labels you pass rather than merging them, and
-touches only the fields you name. There is no \`board delete\` — \`done\` is the
-terminal state for finished work, and removing a card the user filed is theirs
-to do in Orbit.
+touches only the fields you name. There is no \`board delete\`: \`done\` is the
+terminal state, and removing a card the user filed is theirs to do in Orbit.
 
 ## Decisions are append-only
 
 \`decision create\` is for something with real tradeoffs worth a paper trail:
-\`--context\` is why it came up, \`--decision\` is what was decided,
-\`--consequences\` is the follow-on effects. There is deliberately **no
-\`decision update\`** — a decision record states what was decided at a point in
-time. When it stops being right, record a new decision that supersedes it and
-say so in its \`--context\`. Editing the history is how a decision log stops
-being worth reading.
+\`--context\` is why it came up, \`--decision\` what was decided, \`--consequences\`
+the follow-on effects. There is deliberately **no \`decision update\`** — a record
+states what was decided at a point in time. When it stops being right, record a
+new decision that supersedes it and say so in its \`--context\`. Editing the
+history is how a decision log stops being worth reading.
 
-Requirements are different: they legitimately move along, so they do have
-\`update\`.
+Requirements legitimately move along, so they do have \`update\`.
 
 \`\`\`
 workser requirement create "Support SSO" --body "Enterprise customers need SAML." \\
@@ -680,25 +1167,11 @@ workser requirement update <id> --status done
 ## Docs
 
 \`--markdown\` is the normal way to write one. The body is stored both as the
-rich-text content the Docs panel renders and as a git-tracked markdown mirror
-at \`.workser/docs/<id>.md\` — \`workser doc show <id> --markdown\` reports that
-path so you can read the file with your normal tools.
+rich text the Docs panel renders and as a git-tracked mirror at
+\`.workser/docs/<id>.md\`; \`workser doc show <id> --markdown\` reports that path so
+you can read the file with your normal tools.
 
-Revise the page that exists rather than creating a second copy of it:
-
-\`\`\`
-workser doc list --json                       # is there already a page for this?
-workser doc update <id> --markdown "$(cat updated.md)"
-\`\`\`
-
-\`--work-item <id>\` links a document to a Board card (a card has at most one).
-
-## When to record, and when not to
-
-Record what a future maintainer would need: follow-up work you found but didn't
-do, a choice between real alternatives, a behaviour worth writing down. Don't
-narrate every small step — and never treat filing a card as a substitute for the
-work. A card saying "fix the bug" is not fixing the bug.
+Revise trd saying "fix the bug" is not fixing the bug.
 `,
   },
   {
@@ -792,6 +1265,7 @@ workser task subtask add <title> [--role <value>] [--kind <value>]
 workser task subtask list [taskId]
 workser task subtask update <id> [--title|--note|--role|--kind|--scope]
 workser task subtask remove <id>
+workser task subtask send-back <id> --note <text>   # redo it, and say why
 
 workser task can-start [id]             # may work begin? refuses until approved
 workser task approval request           # tell the owner the plan is ready
@@ -850,6 +1324,75 @@ workser task done --summary "The report now shows cost per KOL, with six months 
 \`\`\`
 
 Write the summary for someone who runs a business and does not read code.
+
+## Sending a step back
+
+A step that finished but is not good enough is **sent back**, not replaced:
+
+\`\`\`
+workser task subtask send-back 3f2a… --note "The totals ignore refunds."
+\`\`\`
+
+That puts it in the queue again as a **second attempt** on the same step. Two
+reasons it matters that this is not a new step:
+
+- The owner's screen can then say *"1 send-back, fixed — 2nd run passed"*. A
+  replacement step says only that two steps exist, which tells them nothing
+  about whether their team caught its own mistake.
+- \`--note\` is the reason, and it is recorded against the attempt being
+  rejected. Without it the history can say a step ran twice but not why.
+
+It refuses a step that is still working. Let it finish first — the run is
+still writing to it.
+`,
+  },
+  {
+    topic: "usage",
+    title: "Usage — what is being used, against the plan",
+    summary: "How much database, file storage, projects and apps are in use, and how close that is to what the plan allows.",
+    commands: ["usage"],
+    source: "skills/workser/reference/usage.md",
+    body: `# Usage — what is being used, against the plan
+
+\`\`\`
+workser usage        # storage, projects, apps — and how close each is to the limit
+\`\`\`
+
+Run it before you propose anything that adds to a count. "Create another
+project" is a plan you can only sensibly make if you know the plan allows two
+and two already exist.
+
+## Two scopes in one answer, on purpose
+
+* **Database and files are ORGANISATION-wide.** One pool across every project.
+  There is no per-project storage limit, and reporting one would invent it.
+* **Projects, and apps in this project, are counted where they apply.** These
+  are the limits people actually hit.
+
+## Two kinds of limit, which do not mean the same thing
+
+* **Hard cap** — projects, apps. Going over is **refused**. \`workser usage\`
+  exits non-zero when one is reached, so a step can gate on it.
+* **Soft allowance** — database, files. Going over is **billed as extra**,
+  never blocked. It does not fail the command, because a customer growing past
+  their allowance should not have their automation start breaking that day.
+
+## "not measured" is not zero
+
+A figure that could not be read prints as \`not measured\`, with the reason, and
+draws no bar. Do not report it as \`0\`, and do not tell the user they have room
+based on it — nobody looked.
+
+If a scan comes back with a figure missing, say which one and why. "Your
+database is using 2.5 GB of 10; the file total could not be read" is a useful
+sentence. "You are using 2.5 GB of 20" is not, and it is wrong.
+
+## What to do with it
+
+- Near a **soft** limit: tell the owner what the extra will cost them, and what
+  is taking the space. Do not delete anything to make a number look better.
+- At a **hard** cap: say which plan raises it. Do not attempt the create — it
+  will be refused, and a failed attempt reads to the owner as a broken product.
 `,
   },
   {

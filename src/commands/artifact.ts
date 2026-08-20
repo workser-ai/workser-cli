@@ -19,6 +19,19 @@ import { WorkserError } from "../errors.js";
  * Registering explicitly is what makes the task's Deliverables list correct:
  * the right things, with the right kind, opening the right way.
  */
+/**
+ * What an artifact can be.
+ *
+ * The first group is a FILE, described by what kind of file it is. The second
+ * is a DELIVERABLE, described by what the owner asked for — and those are the
+ * ones the task's "Delivered" screen draws as cards, each with its own shape:
+ * a report opens a chart, a before/after wipes between two pictures, a
+ * document splits what changed from how it works.
+ *
+ * The second group was missing, which meant three of the card shapes the
+ * desktop can draw had no way of ever being produced: this list rejected the
+ * kind outright, and there was no way to attach the figures a card reads.
+ */
 const KINDS = [
   "file",
   "folder",
@@ -34,6 +47,14 @@ const KINDS = [
   "document",
   "archive",
   "other",
+  // Deliverable shapes — see above.
+  "report",
+  "walkthrough",
+  "before_after",
+  "checks",
+  "web_app",
+  "service",
+  "design",
 ] as const;
 
 export function registerArtifact(program: Command): void {
@@ -51,6 +72,14 @@ export function registerArtifact(program: Command): void {
     .option("-t, --title <title>", "display name (default: the file name)")
     .option("-d, --description <text>", "one line on what it is / what it's for")
     .option("-u, --url <url>", "a hosted deliverable (deployed app, public file)")
+    .option(
+      "--data <json>",
+      "figures the card shows, as JSON — e.g. '{\"passed\":12,\"total\":12}'",
+    )
+    .option(
+      "--promote",
+      "hand it straight to the task as one of the things the owner asked for",
+    )
     .action(
       action(async ({ ctx, opts, args }) => {
         const rawPath = args[0] as string | undefined;
@@ -92,6 +121,28 @@ export function registerArtifact(program: Command): void {
           );
         }
 
+        // Parsed here rather than forwarded as a string, so a typo fails at
+        // the keyboard with the reason. Sent on as an object, it would reach
+        // the card as a quoted blob and render as nothing at all — the failure
+        // nobody traces back to a missing brace.
+        let data: Record<string, unknown> | undefined;
+        if (opts.data) {
+          try {
+            const parsed = JSON.parse(String(opts.data));
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              throw new Error("not an object");
+            }
+            data = parsed as Record<string, unknown>;
+          } catch (err) {
+            throw new WorkserError(
+              `--data must be a JSON object. ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+              { code: "bad_request" },
+            );
+          }
+        }
+
         const res = await api(ctx, `/v1/runs/${runTarget(ctx)}/artifacts`, {
           body: {
             path: absPath,
@@ -99,6 +150,8 @@ export function registerArtifact(program: Command): void {
             kind,
             title: opts.title || (absPath ? basename(absPath) : url),
             description: opts.description,
+            data,
+            promote: opts.promote ? true : undefined,
           },
         });
 

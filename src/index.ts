@@ -36,6 +36,13 @@ import { assertRoleMayRun } from "./role-guard.js";
 import { registerDecision } from "./commands/decision.js";
 import { registerDoc } from "./commands/doc.js";
 import { registerDesign } from "./commands/design.js";
+import { registerApi } from "./commands/api.js";
+import { registerAnalysis } from "./commands/analysis.js";
+import { registerScan } from "./commands/scan.js";
+import { registerHealth } from "./commands/health.js";
+import { registerUrls } from "./commands/urls.js";
+import { registerDeployments } from "./commands/deployments.js";
+import { registerUsage } from "./commands/usage.js";
 
 // Version is inlined at build time (see `define` in tsup.config.ts) so the
 // single self-contained dist/index.js needs no sibling package.json at runtime.
@@ -92,6 +99,13 @@ registerOpen(program);
 registerDoctor(program);
 registerAgent(program);
 registerVerify(program);
+registerApi(program);
+registerAnalysis(program);
+registerScan(program);
+registerHealth(program);
+registerUrls(program);
+registerDeployments(program);
+registerUsage(program);
 registerCheckpoint(program);
 registerSync(program);
 registerWorkflow(program);

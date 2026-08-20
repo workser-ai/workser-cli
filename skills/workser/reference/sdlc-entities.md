@@ -1,16 +1,16 @@
 ---
 topic: sdlc-entities
-title: Board cards, decisions, requirements, and docs
+title: Board cards, decisions and requirements
 summary: Read what this project already tracks and decided, keep the Board honest as you work, and record what a future maintainer will need.
-commands: [board, decision, requirement, doc]
+commands: [board, decision, requirement]
 ---
 
-# Board cards, decisions, requirements, and docs
+# Board cards, decisions and requirements
 
 These are the project's memory across sessions. They write to the **same tables**
-the Orbit desktop's Board, Project Memory, and Docs panels use, so anything here
-appears there too — and (when this CLI runs inside an Orbit-spawned agent run)
-as an inline card in the conversation you're working in.
+the Orbit desktop's Board and Project Memory panels use, so anything here appears
+there too — and, inside an Orbit-spawned run, as an inline card in the
+conversation. Documents have their own guide: `workser help docs`.
 
 ```
 workser board list [--status <value>] [--label <value>] [--limit <n>]
@@ -33,11 +33,6 @@ workser requirement show <id>
 workser requirement create <title> --body <text> [--status <text>]
 workser requirement update <id> [--title <text>] [--body <text>] [--status <text>]
 
-workser doc list [--work-item <id>]
-workser doc show <id> [--markdown]
-workser doc create <title> [--work-item <id>] [--markdown <text>]
-                            [--content-json <json>]
-workser doc update <id> [--title <text>] [--markdown <text>]
 ```
 
 ## Read first — this is the part that matters
@@ -66,7 +61,6 @@ workser board create "Phase 1 — schema + migration" \
   --description "Add orders/line_items tables and the migration." \
   --status in-progress --json
 workser board create "Phase 2 — checkout API" --description "…" --json
-workser board create "Phase 3 — cart UI"      --description "…" --json
 
 # the plan itself, ONE doc, deliberately NOT linked to a card
 workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
@@ -76,8 +70,8 @@ workser decision create "Carts live server-side" --context "…" --decision "…
 ```
 
 **Don't pass `--work-item` for a multi-phase plan.** A linked document renders on
-its card and is *hidden* from the Docs panel; a plan spanning three phases belongs
-to the project, not to phase 1.
+its card and is *hidden* from the Docs panel; a plan spanning three phases
+belongs to the project, not to phase 1.
 
 The bar: if the user closed this conversation now, the Board should still show
 what's left and the doc should still explain the plan to whoever continues it.
@@ -103,22 +97,19 @@ workser board create "Fix the login bug" --status in-progress --priority high \
 ```
 
 `board update` replaces the labels you pass rather than merging them, and
-touches only the fields you name. There is no `board delete` — `done` is the
-terminal state for finished work, and removing a card the user filed is theirs
-to do in Orbit.
+touches only the fields you name. There is no `board delete`: `done` is the
+terminal state, and removing a card the user filed is theirs to do in Orbit.
 
 ## Decisions are append-only
 
 `decision create` is for something with real tradeoffs worth a paper trail:
-`--context` is why it came up, `--decision` is what was decided,
-`--consequences` is the follow-on effects. There is deliberately **no
-`decision update`** — a decision record states what was decided at a point in
-time. When it stops being right, record a new decision that supersedes it and
-say so in its `--context`. Editing the history is how a decision log stops
-being worth reading.
+`--context` is why it came up, `--decision` what was decided, `--consequences`
+the follow-on effects. There is deliberately **no `decision update`** — a record
+states what was decided at a point in time. When it stops being right, record a
+new decision that supersedes it and say so in its `--context`. Editing the
+history is how a decision log stops being worth reading.
 
-Requirements are different: they legitimately move along, so they do have
-`update`.
+Requirements legitimately move along, so they do have `update`.
 
 ```
 workser requirement create "Support SSO" --body "Enterprise customers need SAML." \
@@ -129,22 +120,8 @@ workser requirement update <id> --status done
 ## Docs
 
 `--markdown` is the normal way to write one. The body is stored both as the
-rich-text content the Docs panel renders and as a git-tracked markdown mirror
-at `.workser/docs/<id>.md` — `workser doc show <id> --markdown` reports that
-path so you can read the file with your normal tools.
+rich text the Docs panel renders and as a git-tracked mirror at
+`.workser/docs/<id>.md`; `workser doc show <id> --markdown` reports that path so
+you can read the file with your normal tools.
 
-Revise the page that exists rather than creating a second copy of it:
-
-```
-workser doc list --json                       # is there already a page for this?
-workser doc update <id> --markdown "$(cat updated.md)"
-```
-
-`--work-item <id>` links a document to a Board card (a card has at most one).
-
-## When to record, and when not to
-
-Record what a future maintainer would need: follow-up work you found but didn't
-do, a choice between real alternatives, a behaviour worth writing down. Don't
-narrate every small step — and never treat filing a card as a substitute for the
-work. A card saying "fix the bug" is not fixing the bug.
+Revise trd saying "fix the bug" is not fixing the bug.
