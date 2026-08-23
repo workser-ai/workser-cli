@@ -130,6 +130,13 @@ registerDesign(program);
  * been resolved, and a `--help` or a validation error would report the wrong
  * thing first. Here the refusal is the only thing that happens.
  */
+// Commander has not run its preAction hook yet, so prime the two output flags
+// the guard may need. Without this, `workser --json ...` role refusals print
+// human stderr and leave automation with no JSON envelope.
+configureOutput({
+  json: process.argv.includes("--json"),
+  quiet: process.argv.includes("--quiet") || process.argv.includes("-q"),
+});
 try {
   assertRoleMayRun(process.argv.slice(2));
 } catch (e) {

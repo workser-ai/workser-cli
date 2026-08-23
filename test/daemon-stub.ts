@@ -741,6 +741,35 @@ function route(
     };
   }
 
+  if (method === "POST" && path === "/v1/project-tasks") {
+    const sent = (req.body ?? {}) as Record<string, unknown>;
+    return {
+      status: 201,
+      body: {
+        id: "11111111-1111-4111-8111-111111111111",
+        key: "WORKS-42",
+        parent_task_id: null,
+        status: "todo",
+        approval_state: "awaiting",
+        ...sent,
+      },
+    };
+  }
+  if (
+    method === "POST" &&
+    /^\/v1\/project-channels\/[^/]+\/messages$/.test(path)
+  ) {
+    return {
+      status: 201,
+      body: {
+        id: "agent-message-1",
+        authorKind: "agent",
+        agentRole: (req.body as any)?.agentRole,
+        attachments: (req.body as any)?.attachments ?? [],
+      },
+    };
+  }
+
   // --- SDLC surfaces: Board, Docs, project Memory, brand ----------------
   //
   // The daemon scopes all of these to the pinned project, so the stub keys off

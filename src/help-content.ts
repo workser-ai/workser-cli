@@ -1231,6 +1231,9 @@ below defaults to it and you rarely pass an id at all.
 \`\`\`
 workser task list [--status <value>] [--label <value>] [--limit <n>]
 workser task show [id]                  # the task you are in, with its steps
+workser task create <title> [--note <text>] [--kind <value>]
+                           [--label <value...>] [--app <id...>]
+                           [--infra <ref...>]
 
 workser task subtask add <title> [--role <value>] [--kind <value>]
                                  [--note <text>] [--app <id...>]
@@ -1253,6 +1256,16 @@ workser task done [id] --summary <text>
 Team's own table. Filing your plan on the Board puts it somewhere the owner's
 task page never reads: they see "created work item" and an empty plan. Use
 \`task subtask add\`.
+
+## Opening work from a project channel
+
+When a project-channel conversation produces actionable work, the PM may record
+it with \`workser task create\`. Orbit supplies the channel and source-message IDs;
+the command records them and posts the new task card as a Project Manager message
+automatically. Do not invent or ask for those IDs.
+
+Opening a task does **not** approve it or start implementation. The task remains
+awaiting the owner. Never approve or dispatch a task you opened yourself.
 
 ## Planning a task
 

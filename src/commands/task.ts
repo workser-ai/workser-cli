@@ -3,7 +3,7 @@ import pc from "picocolors";
 import { action } from "../run.js";
 import { api } from "../client.js";
 import { requireProject, type Context } from "../context.js";
-import { ok, line } from "../output.js";
+import { ok, line, warn } from "../output.js";
 import { WorkserError } from "../errors.js";
 
 /**
@@ -118,6 +118,104 @@ export function registerTask(program: Command): void {
         const id = resolveTaskId(ctx, args[0]);
         const row = await api<TaskDetail>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}`);
         ok(row, () => printTask(row));
+      }),
+    );
+
+  /**
+   * Open a ROOT task from a project conversation.
+   *
+   * A task records work; it does not approve or dispatch it. When Orbit
+   * supplies channel origin, keep that provenance server-side and attach the
+   * resulting card to the source message so the decision and the work stay one
+   * click apart.
+   */
+  task
+    .command("create <title>")
+    .description("Open a new root task for the project team")
+    .option("--note <text>", "context, constraints and expected outcome")
+    .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
+    .option("--label <value...>", "labels to put on the task")
+    .option("--app <id...>", "apps the task touches")
+    .option("--infra <ref...>", "shared setup it touches")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        requireProject(ctx);
+        if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
+
+        const hasChannelOrigin = Boolean(
+          ctx.projectChannelId && ctx.projectChannelMessageId,
+        );
+        const row = await api<ProjectTask>(ctx, "/v1/project-tasks", {
+          body: {
+            title: args[0],
+            summary: opts.note,
+            category: opts.kind,
+            labels: opts.label,
+            targets: [
+              ...(opts.app ?? []).map((appId: string) => ({ kind: "app", appId })),
+              ...(opts.infra ?? []).map((ref: string) => ({ kind: "infra", ref })),
+            ],
+            ...(hasChannelOrigin
+              ? {
+                  channelId: ctx.projectChannelId,
+                  createdFromMessageId: ctx.projectChannelMessageId,
+                  createdByKind: "agent",
+                }
+              : {}),
+          },
+        });
+
+        let channelMessage: unknown;
+        let channelMessageError: { code: string; message: string } | undefined;
+        if (
+          hasChannelOrigin &&
+          ctx.projectChannelId &&
+          ctx.projectChannelMessageId
+        ) {
+          try {
+            channelMessage = await api(
+              ctx,
+              `/v1/project-channels/${encodeURIComponent(ctx.projectChannelId)}` +
+                "/messages",
+              {
+                body: {
+                  content: "",
+                  agentRole: ctx.agentRole ?? "pm",
+                  agentType: ctx.agentType ?? "workser",
+                  agentModel: ctx.agentModel ?? "Agent default",
+                  attachments: [{ resourceType: "task", resourceId: row.id }],
+                },
+              },
+            );
+          } catch (error) {
+            // The task already exists. A failing exit would invite a retry and
+            // create a duplicate, so keep success and make the card failure
+            // explicit in both JSON and human output.
+            const failure =
+              error instanceof WorkserError
+                ? error
+                : new WorkserError(String(error));
+            channelMessageError = {
+              code: failure.code,
+              message: failure.message,
+            };
+          }
+        }
+
+        const result = {
+          ...row,
+          ...(channelMessage ? { channelMessage } : {}),
+          ...(channelMessageError ? { channelMessageError } : {}),
+        };
+        ok(result, () => {
+          line(`${pc.green("opened")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`);
+          if (channelMessage) line(pc.dim("posted to the channel as Project Manager"));
+          if (channelMessageError) {
+            warn(
+              `Task opened, but its Project Manager card could not be posted: ${channelMessageError.message}`,
+            );
+          }
+        });
       }),
     );
 

@@ -79,15 +79,19 @@ export function assertRoleMayRun(argv: string[]): void {
   const role = (process.env.WORKSER_ROLE ?? "").trim();
   if (!role) return;
 
-  const verb = argv[0];
+  const commandArgv = stripLeadingGlobalOptions(argv);
+  const verb = commandArgv[0];
   if (!verb) return;
 
-  const pair = `${argv[0]} ${argv[1] ?? ""}`.trim();
+  const pair = `${commandArgv[0]} ${commandArgv[1] ?? ""}`.trim();
   // `approval request` only READS — it tells the owner the plan is ready. The
   // two that decide are the ones no agent may run.
   if (
     NEVER[pair] &&
-    !(pair === "task approval" && (argv[2] === "request" || !argv[2]))
+    !(
+      pair === "task approval" &&
+      (commandArgv[2] === "request" || !commandArgv[2])
+    )
   ) {
     throw new WorkserError(NEVER[pair], { code: "role_forbidden" });
   }
@@ -103,4 +107,45 @@ export function assertRoleMayRun(argv: string[]): void {
       { code: "role_forbidden" },
     );
   }
+}
+
+/**
+ * Commander accepts global options before or after a subcommand. The role
+ * gate runs before Commander, so it must skip the leading ones itself or
+ * `workser --json task list` is misread as a forbidden `--json` verb.
+ */
+function stripLeadingGlobalOptions(argv: string[]): string[] {
+  const takesValue = new Set([
+    "-p",
+    "--project",
+    "-C",
+    "--cwd",
+    "--endpoint",
+    "--token",
+  ]);
+  const flags = new Set(["--json", "-q", "--quiet", "-v", "--version"]);
+
+  let index = 0;
+  while (index < argv.length) {
+    const token = argv[index];
+    if (flags.has(token)) {
+      index += 1;
+      continue;
+    }
+    if (takesValue.has(token)) {
+      index += 2;
+      continue;
+    }
+    if (
+      token.startsWith("--project=") ||
+      token.startsWith("--cwd=") ||
+      token.startsWith("--endpoint=") ||
+      token.startsWith("--token=")
+    ) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  return argv.slice(index);
 }

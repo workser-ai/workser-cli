@@ -572,6 +572,97 @@ describe("project list (read-only workspace browse)", () => {
   });
 });
 
+describe("project-channel PM task intake", () => {
+  it("creates an awaiting task with trusted origin and attaches its card", async () => {
+    const channelId = "22222222-2222-4222-8222-222222222222";
+    const messageId = "33333333-3333-4333-8333-333333333333";
+    const r = await cli(
+      [
+        "task",
+        "create",
+        "Fix checkout tax",
+        "--note",
+        "Tax is doubled",
+        "--kind",
+        "service",
+        "--label",
+        "bug",
+        "--project",
+        "p_1",
+      ],
+      {
+        env: {
+          WORKSER_ROLE: "pm",
+          WORKSER_PROJECT_CHANNEL_ID: channelId,
+          WORKSER_PROJECT_CHANNEL_MESSAGE_ID: messageId,
+          WORKSER_AGENT_ROLE: "pm",
+          WORKSER_AGENT_TYPE: "opencode",
+          WORKSER_AGENT_MODEL: "deepseek-v4-pro",
+        },
+      },
+    );
+
+    expect(r.code).toBe(0);
+    expect(stub.find("POST", "/v1/project-tasks")?.body).toMatchObject({
+      title: "Fix checkout tax",
+      summary: "Tax is doubled",
+      category: "service",
+      labels: ["bug"],
+      channelId,
+      createdFromMessageId: messageId,
+      createdByKind: "agent",
+    });
+    expect(
+      stub.find(
+        "POST",
+        `/v1/project-channels/${channelId}/messages`,
+      )?.body,
+    ).toEqual({
+      content: "",
+      agentRole: "pm",
+      agentType: "opencode",
+      agentModel: "deepseek-v4-pro",
+      attachments: [
+        {
+          resourceType: "task",
+          resourceId: "11111111-1111-4111-8111-111111111111",
+        },
+      ],
+    });
+    expect(r.json.data.approval_state).toBe("awaiting");
+    expect(r.json.data.channelMessage.authorKind).toBe("agent");
+  });
+
+  it("creates a normal task without channel provenance outside channel chat", async () => {
+    const r = await cli([
+      "task",
+      "create",
+      "Document the API",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.lastRequest?.body).toEqual({
+      title: "Document the API",
+      targets: [],
+    });
+  });
+
+  it("still prevents a PM from approving its own task with global flags first", async () => {
+    const before = stub.requests.length;
+    const r = await cli(
+      ["task", "approval", "approve", "--task", "WORKS-42", "--project", "p_1"],
+      { env: { WORKSER_ROLE: "pm" } },
+    );
+
+    expect(r.code).toBe(1);
+    expect(r.json.error.code).toBe("role_forbidden");
+    expect(stub.requests).toHaveLength(before);
+  });
+});
+
 describe("owner-only boundary (agent cannot administer the project set / destroy config)", () => {
   // Each must refuse with exit 6 + code "owner_only" and make NO network call.
   const cases: Array<{ name: string; argv: string[] }> = [
