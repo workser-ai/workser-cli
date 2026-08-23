@@ -18,7 +18,7 @@ load.
 
 | You need to… | Commands | Run |
 | --- | --- | --- |
-| See what's tracked, decided, or written down for this project | `board …`, `decision …`, `requirement …`, `doc …` | `workser help sdlc-entities` |
+| See what was decided or written down for this project | `decision …`, `requirement …`, `doc …` | `workser help sdlc-entities` |
 | Follow the project's brand — colours, fonts, logo | `design …` | `workser help brand` |
 | Provision or query Postgres; list end users | `db …`, `auth …` | `workser help database` |
 | Deploy, set env vars, read logs, check a domain | `deploy`, `env …`, `logs`, `versions`, `domain`, `open` | `workser help deploy` |
@@ -70,15 +70,16 @@ pick or switch it.
 2. **Orient first.** Run `workser status --json` to see the connection, the pinned
    project, and the latest deploy before acting. You don't pick or switch projects.
    For anything beyond a trivial edit, also read what the project already knows:
-   `workser board list --json` (what's tracked), `workser decision list --json`
-   (what was already decided, so you don't quietly reverse it), and
-   `workser design show --json` before writing UI. This project outlives your
-   session; that context is how you don't start from zero.
-3. **A phased plan goes on the Board before you build it.** One `board create`
-   card per phase, the plan itself as one `doc create` (no `--work-item`, or it's
-   hidden from the Docs panel), and a `decision create` if it settled a real
-   tradeoff. A plan that lives only in your reply is gone when the conversation
-   scrolls. Details: `workser help sdlc-entities`.
+   `workser decision list --json` (what was already decided, so you don't quietly
+   reverse it), and `workser design show --json` before writing UI. This project
+   outlives your session; that context is how you don't start from zero.
+3. **A phased plan goes on the subtask list, never the Board.** Phases are
+   `workser task subtask add` (`workser help tasks`) — not `board create`,
+   which makes a second, driftable "the plan" the task page never reads.
+   Write the narrative once as `doc create` (no `--work-item`, or it's hidden
+   from the Docs panel), plus `decision create` for a real tradeoff. A plan
+   in your reply alone is gone when the conversation scrolls. Details:
+   `workser help sdlc-entities`.
 4. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
    reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
    user, then continue. Provisioning the *pinned project's own* db / bucket / auth is
@@ -98,17 +99,15 @@ pick or switch it.
 ## Typical flow: build → ship
 
 ```bash
-workser status --json                       # 1. orient (project is already pinned)
-workser board list --json                   # 2. what's already tracked
-workser decision list --json                #    …and already decided
-workser board create "Phase 2 — …" --json   # 3. phases? file them + the plan doc
-workser board move <id> in-progress --json  # 4. claim the card you're doing
-workser db create --json                    # 5. provision infra the app needs (idempotent)
-workser env set STRIPE_KEY=sk_live_… --json # 6. configure it
+workser status --json                            # 1. orient (project is already pinned)
+workser decision list --json                     # 2. what's already decided
+workser task subtask add "Phase 2 — …" --json     # 3. phases? file them as subtasks
+workser doc create "Plan" --markdown "…" --json   # 4. the plan's narrative, once
+workser db create --json                          # 5. provision infra the app needs (idempotent)
+workser env set STRIPE_KEY=sk_live_… --json      # 6. configure it
 # … you write the app code with your normal tools …
-workser verify --json                       # 7. green build is the bar for "done"
-workser deploy --prod --watch --json        # 8. ship; returns the stable *.workser.app URL
-workser board close <id> --json             # 9. the Board now matches reality
+workser verify --json                             # 7. green build is the bar for "done"
+workser deploy --prod --watch --json              # 8. ship; returns the stable *.workser.app URL
 ```
 
 ## Reading results

@@ -143,7 +143,10 @@ export function registerTask(program: Command): void {
     .option("--role <value>", `who does it (${ROLES.join(" | ")})`)
     .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
     .option("--note <text>", "one sentence on what this step does")
-    .option("--app <id...>", "app ids this step touches")
+    .option(
+      "--app <id...>",
+      "the app this step is for — one id runs the step inside that app's folder; leave it off and the step runs at the project, seeing every app",
+    )
     .option("--infra <ref...>", "shared setup it touches (database | storage | auth | hosting | jobs)")
     .option("--scope <path...>", "files or folders THIS step owns")
     .option("--depends-on <id...>", "steps that must finish first (key or id)")

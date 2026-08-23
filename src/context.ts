@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { readSession, readProjectLink } from "./config.js";
+import { readSession, readFolderIdentity } from "./config.js";
 import { cloudBaseUrl } from "./env.js";
 import { WorkserError } from "./errors.js";
 
@@ -27,6 +27,30 @@ export interface Context {
   mode: "daemon" | "cloud";
   cwd: string;
   projectId?: string;
+  /**
+   * The PROJECT folder this cwd sits under, when the folder identifies one.
+   *
+   * The project directory is the parent of every app in the project, and it is
+   * what a project-level command should be acting on — the folder the user
+   * thinks of as "my project" rather than whichever subdirectory their shell
+   * happened to be in.
+   */
+  projectRoot?: string;
+  /**
+   * Which app the cwd is INSIDE, when it is inside one.
+   *
+   * Read from the `.workser-app` marker Workser writes into every app folder.
+   * Standing in the project folder leaves this unset, deliberately: a folder
+   * holding a storefront, an api and a worker does not pick one for you, and a
+   * command that needs an app should say so rather than guess.
+   *
+   * Only ever a DEFAULT. `--app` always wins, and the daemon does its own
+   * folder-to-app resolution against the paths it has recorded, which stays
+   * authoritative — this is what makes an app resolvable in cloud mode and
+   * without a round trip.
+   */
+  appId?: string;
+  appName?: string;
   /**
    * The agent run this CLI invocation is executing inside, if any.
    *
@@ -108,14 +132,20 @@ export function buildContext(opts: GlobalOpts): Context {
       ? "daemon"
       : "cloud";
 
-  const link = readProjectLink(cwd);
+  const folder = readFolderIdentity(cwd);
   // A run always knows its own project; prefer it over the cwd link so an
   // agent working in a subfolder still records against the right project.
   const projectId =
     opts.project ||
     process.env.WORKSER_PROJECT_ID ||
-    link?.projectId ||
+    folder?.projectId ||
     session.defaultProjectId;
+
+  // Only trust the folder's app when the folder's PROJECT is the one we settled
+  // on. Otherwise `--project other-id` run from inside an app would carry that
+  // app's id into a project it does not belong to, and the daemon would happily
+  // act on it.
+  const inThisProject = folder?.projectId === projectId;
 
   const runId = process.env.WORKSER_RUN_ID || undefined;
   const conversationId = process.env.WORKSER_CONVERSATION_ID || undefined;
@@ -128,6 +158,9 @@ export function buildContext(opts: GlobalOpts): Context {
     mode,
     cwd,
     projectId,
+    projectRoot: inThisProject ? folder?.projectRoot : undefined,
+    appId: inThisProject ? folder?.appId : undefined,
+    appName: inThisProject ? folder?.appName : undefined,
     runId,
     conversationId,
     projectTaskId,
@@ -199,9 +232,28 @@ export function requireDaemon(ctx: Context, what: string, why: string): void {
 export function requireProject(ctx: Context): string {
   if (!ctx.projectId) {
     throw new WorkserError(
-      "No project selected. Run `workser project use <id>` or pass --project <id>.",
+      "No project selected.\n" +
+        "\nWorkser keeps each project in its own folder — `~/workser/<org>/<project>/`,\n" +
+        "with that project's apps inside it. Running from anywhere in that tree is\n" +
+        "enough; this shell is not in one.\n" +
+        "\n  • cd into the project's folder (Workser Orbit's Files tab shows where it is), or\n" +
+        "  • pass --project <id> for a one-off.",
       { code: "no_project" },
     );
   }
   return ctx.projectId;
+}
+
+/**
+ * The app to act on: what the caller said, else the app whose folder we are
+ * standing in.
+ *
+ * Returns `undefined` rather than guessing when neither is available — the
+ * daemon's own resolver takes over there, and it is the one with the recorded
+ * folder paths. See `resolve-app.ts` in the desktop repo: where a wrong answer
+ * WRITES or SHIPS, refusing beats picking.
+ */
+export function appTarget(ctx: Context, explicit?: string): string | undefined {
+  const said = typeof explicit === "string" ? explicit.trim() : "";
+  return said || ctx.appId || undefined;
 }

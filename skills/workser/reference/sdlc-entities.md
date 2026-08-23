@@ -1,28 +1,27 @@
 ---
 topic: sdlc-entities
-title: Board cards, decisions and requirements
-summary: Read what this project already tracks and decided, keep the Board honest as you work, and record what a future maintainer will need.
+title: Decisions and requirements
+summary: Read what this project already decided, and record what a future maintainer will need. Phased work itself is subtasks, not board cards — see `workser help tasks`.
 commands: [board, decision, requirement]
 ---
 
-# Board cards, decisions and requirements
+# Decisions and requirements
 
 These are the project's memory across sessions. They write to the **same tables**
-the Orbit desktop's Board and Project Memory panels use, so anything here appears
-there too — and, inside an Orbit-spawned run, as an inline card in the
-conversation. Documents have their own guide: `workser help docs`.
+the Orbit desktop's Project Memory panel uses, so anything here appears there too
+— and, inside an Orbit-spawned run, as an inline card in the conversation.
+Documents have their own guide: `workser help docs`. Phased work is tracked as
+subtasks, not here — see `workser help tasks`.
+
+> **The Board (`workser board ...`) is deprecated for agent use.** It used to be
+> where a multi-phase plan went, one card per phase — and the phase was ALSO a
+> subtask the planning turn had just filed for the same piece of work. That gave
+> a task two competing plans, one of which this task's own page never reads and
+> nothing kept in sync with the other. Phases are `project_tasks` subtasks now,
+> full stop: `workser task subtask add`. Do not run `workser board create` for
+> planned work — see `workser help tasks`.
 
 ```
-workser board list [--status <value>] [--label <value>] [--limit <n>]
-workser board show <id>
-workser board create <title> [--description <text>] [--status <value>]
-                              [--priority <value>] [--label <value>]
-                              [--owner <name>] [--milestone <id>]
-workser board update <id> [--title|--description|--status|--priority
-                           |--label|--owner|--milestone ...]
-workser board move <id> <backlog|in-progress|in-review|done>
-workser board close <id>
-
 workser decision list [--limit <n>]
 workser decision show <id>
 workser decision create <title> --context <text> --decision <text>
@@ -40,7 +39,6 @@ workser requirement update <id> [--title <text>] [--body <text>] [--status <text
 Before starting anything beyond a trivial edit:
 
 ```
-workser board list --json          # what's already tracked (don't re-file it)
 workser decision list --json       # what was already decided (don't reverse it)
 ```
 
@@ -50,19 +48,18 @@ purpose — `workser decision show <id>` gives you the context and consequences,
 not just the title. Reach for `workser doc list` / `workser requirement list`
 the same way when the task touches documented behaviour.
 
-## Work with phases → cards + a plan doc, before you build
+## Work with phases → subtasks + a plan doc, before you build
 
 The moment you split a task into more than one phase, file it — not afterwards,
 and not only in your reply, which is gone once the conversation scrolls.
 
 ```bash
-# one card per phase; only the one you're doing goes to in-progress
-workser board create "Phase 1 — schema + migration" \
-  --description "Add orders/line_items tables and the migration." \
-  --status in-progress --json
-workser board create "Phase 2 — checkout API" --description "…" --json
+# the phases themselves — this task's own subtask list, not the Board
+workser task subtask add "Phase 1 — schema + migration" --role api \
+  --note "Add orders/line_items tables and the migration."
+workser task subtask add "Phase 2 — checkout API" --role api --note "…"
 
-# the plan itself, ONE doc, deliberately NOT linked to a card
+# the plan's narrative, ONE doc, deliberately NOT linked to a subtask
 workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
 
 # the approach, if the plan settled something with real alternatives
@@ -73,32 +70,9 @@ workser decision create "Carts live server-side" --context "…" --decision "…
 its card and is *hidden* from the Docs panel; a plan spanning three phases
 belongs to the project, not to phase 1.
 
-The bar: if the user closed this conversation now, the Board should still show
-what's left and the doc should still explain the plan to whoever continues it.
-
-## Keep the Board honest while you work
-
-A Board still reading `backlog` after the feature shipped tells the user the
-opposite of the truth. Moving the card is part of finishing the work:
-
-```
-workser board move <id> in-progress   # you picked it up
-workser board move <id> in-review     # ready for the user to look at
-workser board close <id>              # done and verified
-```
-
-`--status` is one of `backlog | in-progress | in-review | done` (default
-`backlog`). `--priority` is one of `low | normal | high | urgent` (default
-`normal`). `--label` repeats for more than one label:
-
-```
-workser board create "Fix the login bug" --status in-progress --priority high \
-  --label bug --label auth
-```
-
-`board update` replaces the labels you pass rather than merging them, and
-touches only the fields you name. There is no `board delete`: `done` is the
-terminal state, and removing a card the user filed is theirs to do in Orbit.
+The bar: if the user closed this conversation now, the subtask list should still
+show what's left and the doc should still explain the plan to whoever continues
+it.
 
 ## Decisions are append-only
 
