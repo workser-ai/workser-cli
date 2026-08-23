@@ -84,6 +84,14 @@ export interface Context {
    * it takes `--task` as well.
    */
   projectTaskId?: string;
+  /** Project channel that started this run, when it came from channel chat. */
+  projectChannelId?: string;
+  /** User message that started the channel run. */
+  projectChannelMessageId?: string;
+  /** Agent identity Orbit assigned to this run, for agent-authored records. */
+  agentRole?: string;
+  agentType?: string;
+  agentModel?: string;
 }
 
 /**
@@ -150,6 +158,13 @@ export function buildContext(opts: GlobalOpts): Context {
   const runId = process.env.WORKSER_RUN_ID || undefined;
   const conversationId = process.env.WORKSER_CONVERSATION_ID || undefined;
   const projectTaskId = process.env.WORKSER_PROJECT_TASK_ID || undefined;
+  const projectChannelId =
+    process.env.WORKSER_PROJECT_CHANNEL_ID || undefined;
+  const projectChannelMessageId =
+    process.env.WORKSER_PROJECT_CHANNEL_MESSAGE_ID || undefined;
+  const agentRole = process.env.WORKSER_AGENT_ROLE || undefined;
+  const agentType = process.env.WORKSER_AGENT_TYPE || undefined;
+  const agentModel = process.env.WORKSER_AGENT_MODEL || undefined;
 
   return {
     endpoint,
@@ -164,6 +179,11 @@ export function buildContext(opts: GlobalOpts): Context {
     runId,
     conversationId,
     projectTaskId,
+    projectChannelId,
+    projectChannelMessageId,
+    agentRole,
+    agentType,
+    agentModel,
   };
 }
 
