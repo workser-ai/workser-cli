@@ -165,6 +165,63 @@ export function registerArtifact(program: Command): void {
       }),
     );
 
+  /**
+   * WHAT THE REST OF THE TEAM PRODUCED.
+   *
+   * The read half of this command, and until it existed there was no read half
+   * at all: `workser artifact` could only ADD. An agent working step four of a
+   * plan could see from `task show` that steps one to three were finished and
+   * had no way whatsoever to find out what they had left behind — not through
+   * this CLI, not through any other. Every step re-derived context the
+   * previous one had already established, and the reviewer re-read what the
+   * engineer had just built.
+   *
+   * Defaults to the WHOLE PLAN rather than to this step, because "what has
+   * this task produced so far" is the question an agent actually has, and its
+   * own output is the part it already knows about.
+   *
+   * A read, so it is safe by construction — nothing here can change anything,
+   * which is why it needs no approval and no scope check.
+   */
+  artifact
+    .command("list")
+    .description("What this task's steps have produced so far")
+    .option("--task <id>", "a specific task (default: the plan this run is in)")
+    .option("--step <id>", "one step's output alone, across every attempt")
+    .option("--mine", "only what THIS step has produced")
+    .action(
+      action(async ({ ctx, opts }) => {
+        const stepId = opts.step || (opts.mine ? ctx.projectTaskId : undefined);
+        if (opts.mine && !stepId) {
+          throw new WorkserError(
+            "--mine needs a step: this run isn't inside one (WORKSER_PROJECT_TASK_ID is unset).",
+          );
+        }
+
+        let path: string;
+        if (stepId) {
+          path = `/v1/project-subtasks/${encodeURIComponent(stepId)}/artifacts`;
+        } else {
+          const taskId = opts.task || ctx.parentTaskId || ctx.projectTaskId;
+          if (!taskId) {
+            throw new WorkserError(
+              "No task. This run isn't inside one, so pass --task <id> or --step <id>.",
+            );
+          }
+          // `scope=all` is every step's output, not just what the task has
+          // been asked to hand over. A sibling's working material is exactly
+          // what a later step needs to read, and the promoted set deliberately
+          // excludes most of it.
+          path =
+            `/v1/project-tasks/${encodeURIComponent(taskId)}/artifacts` +
+            `?scope=all`;
+        }
+
+        const rows = (await api<ArtifactRow[]>(ctx, path)) ?? [];
+        ok(rows, () => printArtifacts(rows));
+      }),
+    );
+
   artifact
     .command("run")
     .description("Show the task/conversation this agent run is attached to")
@@ -174,6 +231,49 @@ export function registerArtifact(program: Command): void {
         ok(res, () => printRun(res));
       }),
     );
+}
+
+interface ArtifactRow {
+  id: string;
+  subtask_id: string;
+  kind: string;
+  title: string | null;
+  description?: string | null;
+  local_path?: string | null;
+  cloud_url?: string | null;
+  data: Record<string, unknown> | null;
+  promoted_at: string | null;
+  created_at: string;
+}
+
+function printArtifacts(rows: ArtifactRow[]): void {
+  if (!rows.length) {
+    line(pc.dim("Nothing produced yet."));
+    return;
+  }
+  // Grouped by the step that made it: "who produced this" is the first thing
+  // a reader needs, and a flat list of forty files answers it for none of them.
+  const byStep = new Map<string, ArtifactRow[]>();
+  for (const r of rows) {
+    const list = byStep.get(r.subtask_id) ?? [];
+    list.push(r);
+    byStep.set(r.subtask_id, list);
+  }
+  for (const [stepId, items] of byStep) {
+    line(pc.bold(`step ${stepId}`));
+    for (const a of items) {
+      // The `*` is what the task HANDS OVER, as opposed to working material.
+      const flag = a.promoted_at ? pc.green(" *") : "  ";
+      const where = a.local_path || a.cloud_url || "";
+      line(
+        `${flag} ${pc.dim(`[${a.kind}]`)} ${a.title ?? "(untitled)"}` +
+          (where ? pc.dim(`  ${where}`) : ""),
+      );
+      if (a.description) line(pc.dim(`     ${a.description}`));
+    }
+    line("");
+  }
+  line(pc.dim("* = handed over as a deliverable; the rest is working material."));
 }
 
 function printRun(run: any): void {

@@ -24,7 +24,11 @@ import { WorkserError } from "./errors.js";
  * mean "deny everything" or the whole CLI stops working outside a dispatch.
  */
 const READS = [
-  "task", "board", "doc", "decision", "memory", "search", "verify", "logs",
+  // `requirement` sits beside `doc` and `decision` because it is the same kind
+  // of thing and was simply forgotten: the verb shipped, no role could run it,
+  // and on 2026-08-23 a channel PM reported to the owner that "requirements are
+  // not readable by this PM role" — which was exactly true, for every role.
+  "task", "board", "doc", "decision", "requirement", "memory", "search", "verify", "logs",
   "status", "help", "whoami", "login", "auth", "project", "open", "doctor",
   // Both READ and report. `scan` reads files and shells out to npm; `health`
   // makes a GET request to an address that is already public. Neither can

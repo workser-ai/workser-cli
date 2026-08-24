@@ -84,6 +84,19 @@ export interface Context {
    * it takes `--task` as well.
    */
   projectTaskId?: string;
+  /**
+   * The PLAN a dispatched step belongs to — a different row from the step.
+   *
+   * `projectTaskId` is the step's own id, because that is what `task done` has
+   * to settle. It is NOT the plan, and reading it as one is what made
+   * `workser task show` print the caller's own single row with "No steps yet"
+   * underneath, for an agent whose prompt had just told it to run that command
+   * to see the whole plan and where its step sat in it.
+   *
+   * Absent for a run that is not a step of a plan, and absent on an older
+   * desktop that does not set `WORKSER_PARENT_TASK_ID`.
+   */
+  parentTaskId?: string;
   /** Project channel that started this run, when it came from channel chat. */
   projectChannelId?: string;
   /** User message that started the channel run. */
@@ -158,6 +171,7 @@ export function buildContext(opts: GlobalOpts): Context {
   const runId = process.env.WORKSER_RUN_ID || undefined;
   const conversationId = process.env.WORKSER_CONVERSATION_ID || undefined;
   const projectTaskId = process.env.WORKSER_PROJECT_TASK_ID || undefined;
+  const parentTaskId = process.env.WORKSER_PARENT_TASK_ID || undefined;
   const projectChannelId =
     process.env.WORKSER_PROJECT_CHANNEL_ID || undefined;
   const projectChannelMessageId =
@@ -179,6 +193,7 @@ export function buildContext(opts: GlobalOpts): Context {
     runId,
     conversationId,
     projectTaskId,
+    parentTaskId,
     projectChannelId,
     projectChannelMessageId,
     agentRole,

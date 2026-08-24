@@ -115,6 +115,10 @@ export function registerAgent(program: Command): void {
     )
     .option("--model <model>", "model override for the backing CLI")
     .option("--effort <level>", "reasoning effort, where the backing CLI supports it")
+    .option(
+      "--read-only",
+      "inspection only — the teammate runs in the CLI's read-only sandbox and cannot change anything",
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         const spawnAgent = args[0] as string;
@@ -127,6 +131,9 @@ export function registerAgent(program: Command): void {
             instructions: opts.instructions,
             model: opts.model,
             effort: opts.effort,
+            // Enforced by the backing CLI's own sandbox, not by asking the
+            // spawned agent to behave — see the daemon's `/agents/run`.
+            readOnly: opts.readOnly === true,
           },
         });
         const exitCode = res?.exitCode ?? 0;

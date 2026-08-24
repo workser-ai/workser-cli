@@ -111,11 +111,16 @@ export function registerTask(program: Command): void {
   task
     .command("show [id]")
     .description(
-      "Show one task with its subtasks. Defaults to the task this run is inside.",
+      "Show a task with its subtasks, what each one did, and what they produced. " +
+        "Defaults to the plan this run is part of.",
     )
     .action(
       action(async ({ ctx, args }) => {
-        const id = resolveTaskId(ctx, args[0]);
+        // THE PLAN, not the caller's own row. Inside a dispatched step
+        // `projectTaskId` is that step; the thing worth showing — and the
+        // thing this command's own description promises — is the task it
+        // belongs to, with every sibling and what each of them produced.
+        const id = args[0] || ctx.parentTaskId || resolveTaskId(ctx);
         const row = await api<TaskDetail>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}`);
         ok(row, () => printTask(row));
       }),
@@ -369,6 +374,46 @@ export function registerTask(program: Command): void {
    * `changes_requested` carrying the reason, which is what lets the history
    * say WHY a step ran twice instead of just that it did.
    */
+  /**
+   * RESUME A STEP THE OWNER STOPPED.
+   *
+   * Distinct from `send-back`, and the distinction is the whole point.
+   * `send-back` is for a step that FINISHED badly: it has an attempt to close
+   * and a reason to record. This is for one that never got to finish because a
+   * person pressed Stop — its row is already back at `todo`, so `send-back`
+   * refuses it as `already_open` and nothing moves.
+   *
+   * What actually holds a stopped step is a record on the owner's machine, and
+   * until this existed nothing an agent could run could clear it. So a manager
+   * asked to carry on could only report, over and over, that it could not:
+   * every remaining step blocked behind one it had no verb to release.
+   *
+   * A STOP IS THE OWNER'S DECISION. Resume it when they ask you to carry on —
+   * not because the plan is blocked and you would like it not to be.
+   */
+  task
+    .command("resume [id]")
+    .description(
+      "Put a step the owner stopped back in the queue — only when they ask you to carry on",
+    )
+    .action(
+      action(async ({ ctx, args }) => {
+        const id = resolveTaskId(ctx, args[0]);
+        const row = await api<{ queued?: boolean }>(
+          ctx,
+          `/v1/project-tasks/${encodeURIComponent(id)}/retry`,
+          { method: "POST" },
+        );
+        ok(row, () =>
+          line(
+            row?.queued
+              ? `${pc.green("resumed")} — it is back in the queue and will start on the next dispatch`
+              : pc.yellow("could not resume it — check the step id"),
+          ),
+        );
+      }),
+    );
+
   subtask
     .command("send-back <id>")
     .description("Send a finished step back to be done again, with the reason")
@@ -564,7 +609,28 @@ function formatSubtask(r: ProjectTask, index: number): string {
   const n = pc.dim(String(index).padStart(2, "0"));
   const role = r.role ? pc.dim(` [${r.role}]`) : "";
   const scope = r.scope_paths?.length ? pc.dim(`  owns: ${r.scope_paths.join(", ")}`) : "";
-  return `${n} ${statusTag(r.status)} ${r.title}${role}${scope}`;
+  const head = `${n} ${statusTag(r.status)} ${r.title}${role}${scope}`;
+  /**
+   * WHAT IT ACTUALLY DID — the half that was missing.
+   *
+   * This listing is how every agent on a task learns about its siblings, and
+   * it used to print only their titles and statuses. A step could see that the
+   * three before it were `[ready]` and had no way at all to find out what they
+   * had produced, so each one re-derived context the last one had already
+   * established: the reviewer re-read what the engineer built, the deployer
+   * guessed at what had been changed. `result_summary` was on the type and
+   * never printed.
+   *
+   * Indented under its step rather than appended, because these are sentences
+   * and the line above is a row.
+   */
+  const summary = (r.result_summary ?? "").trim();
+  if (!summary) return head;
+  const wrapped = summary
+    .split("\n")
+    .map((l) => `      ${l}`)
+    .join("\n");
+  return `${head}\n${pc.dim(wrapped)}`;
 }
 
 function printTask(row: TaskDetail): void {
@@ -579,6 +645,19 @@ function printTask(row: TaskDetail): void {
   if (row.subtasks?.length) {
     line(`\n${pc.bold("steps")}`);
     row.subtasks.forEach((s, i) => line(formatSubtask(s, i + 1)));
+    // Where to go next. The summaries above are what a sibling SAID; the
+    // artifacts are what it left behind, and an agent that only ever reads
+    // prose about a file is guessing at the file.
+    line(
+      pc.dim(
+        `\nRun \`workser artifact list\` to see what these steps produced,`,
+      ),
+    );
+    line(
+      pc.dim(
+        `or \`workser artifact list --step <id>\` for one step's output alone.`,
+      ),
+    );
   } else {
     line(pc.dim("\nNo steps yet."));
   }
