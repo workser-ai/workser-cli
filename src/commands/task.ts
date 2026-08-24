@@ -142,6 +142,11 @@ export function registerTask(program: Command): void {
     .option("--label <value...>", "labels to put on the task")
     .option("--app <id...>", "apps the task touches")
     .option("--infra <ref...>", "shared setup it touches")
+    .option("--goal <id>", "the business goal this delivers part of")
+    .option(
+      "--phase <name>",
+      "which slice of that goal — must match one of its phase names",
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         requireProject(ctx);
@@ -156,6 +161,10 @@ export function registerTask(program: Command): void {
             summary: opts.note,
             category: opts.kind,
             labels: opts.label,
+            // The level above this task, when it has one. Most tasks do not —
+            // a goal has to be argued for, never assumed.
+            goalId: opts.goal,
+            phase: opts.phase,
             targets: [
               ...(opts.app ?? []).map((appId: string) => ({ kind: "app", appId })),
               ...(opts.infra ?? []).map((ref: string) => ({ kind: "infra", ref })),
