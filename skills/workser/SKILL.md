@@ -18,6 +18,7 @@ load.
 
 | You need to… | Commands | Run |
 | --- | --- | --- |
+| Track a business requirement too big for one task, and its phases | `goal …` | `workser help goals` |
 | See what was decided or written down for this project | `decision …`, `requirement …`, `doc …` | `workser help sdlc-entities` |
 | Follow the project's brand — colours, fonts, logo | `design …` | `workser help brand` |
 | Provision or query Postgres; list end users | `db …`, `auth …` | `workser help database` |
