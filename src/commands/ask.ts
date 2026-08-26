@@ -30,6 +30,21 @@ const TYPES = [
   "confirmation",
   "file_upload",
   "information",
+  /**
+   * "Add an app to this project, and do it for me."
+   *
+   * NOT an approval with a well-worded message. What the user is agreeing to
+   * is real infrastructure — a repository, hosting, a folder on their machine,
+   * sometimes a database — and they are entitled to see WHICH app before they
+   * agree, which a sentence and a Yes button cannot show. Needs `--app-type`;
+   * `--app-name` is what it will be called.
+   *
+   * You cannot create an app yourself, and that is deliberate: an agent must
+   * not be able to provision things on somebody's account by deciding to. This
+   * asks. Their click is what creates it, and the answer tells you the new
+   * app's id so the rest of your plan can be scoped to it.
+   */
+  "create_app",
 ] as const;
 
 export function registerAsk(program: Command): void {
@@ -47,6 +62,14 @@ export function registerAsk(program: Command): void {
       "a choice (repeat for each; implies --type choice)",
       collect,
       [] as string[],
+    )
+    .option(
+      "--app-type <type>",
+      "create_app only: web | mobile | api | worker | cron | python",
+    )
+    .option(
+      "--app-name <name>",
+      "create_app only: what the app should be called",
     )
     .option("--priority <level>", "low | normal | high | urgent", "normal")
     .option(
@@ -81,6 +104,15 @@ export function registerAsk(program: Command): void {
             { code: "bad_request" },
           );
         }
+        // Refused rather than defaulted to `web`. Guessing would create the
+        // wrong kind of app in the one situation this type exists for — an
+        // agent asking precisely because the project has no MOBILE app.
+        if (type === "create_app" && !opts.appType) {
+          throw new WorkserError(
+            "Say which kind of app: `--app-type mobile`.",
+            { code: "bad_request" },
+          );
+        }
 
         const timeoutSeconds = Number(opts.timeout);
         if (!Number.isFinite(timeoutSeconds) || timeoutSeconds <= 0) {
@@ -97,6 +129,8 @@ export function registerAsk(program: Command): void {
             title: opts.title || deriveTitle(message),
             message,
             options: options.length ? options : undefined,
+            appType: opts.appType,
+            appName: opts.appName,
             priority: opts.priority,
             timeoutSeconds,
           },

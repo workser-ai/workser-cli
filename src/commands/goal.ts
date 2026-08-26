@@ -24,7 +24,7 @@ import { WorkserError } from "../errors.js";
  * two-hour job into four milestones and buries the owner in ceremony before
  * anything is built. See `shouldBeGoal` in the agent's own instructions.
  */
-interface PhaseProgress {
+export interface PhaseProgress {
   name: string;
   index: number;
   total: number;
@@ -32,13 +32,32 @@ interface PhaseProgress {
   accepted: number;
   working: number;
   state: "waiting" | "working" | "done";
+  appIds?: string[];
+  /** What "done" means for this part, and whether it has been checked. */
+  criteria?: Criterion[];
 }
 
-interface Goal {
+export interface Criterion {
+  id: string;
+  text: string;
+  met: boolean | null;
+  note?: string | null;
+}
+
+export interface Goal {
   id: string;
   title: string;
   outcome: string | null;
-  phases: string[];
+  phases: Array<{ name: string; criteria?: Criterion[] } | string>;
+  /**
+   * Apps this goal touches, DERIVED from its tasks — not declared.
+   *
+   * A goal routinely spans several: a trading surface needs a web app, a
+   * market-data service, an agent and a scheduler. Most of them do not exist
+   * when the goal is proposed, so anything declared up front is wrong by the
+   * second phase.
+   */
+  appIds?: string[];
   status: string;
   progress?: PhaseProgress[];
   currentPhase?: string | null;
@@ -108,6 +127,10 @@ export function registerGoal(program: Command): void {
       "--phase <name...>",
       "ordered phase names — each must deliver something the owner would notice",
     )
+    .option(
+      "--criteria <json>",
+      'what "done" means per phase, in the OWNER\'s words: \'{"Checkout":["A customer can pay by card and gets a receipt"]}\'',
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         requireProject(ctx);
@@ -125,12 +148,47 @@ export function registerGoal(program: Command): void {
             "More than six phases is a conversation, not a plan. Propose the first few and agree the rest as you go.",
           );
         }
+        /**
+         * CRITERIA ARE AGREED WITH THE SHAPE, not written afterwards.
+         *
+         * Written at the end they are a description of what got built. The
+         * whole value is stating them while they can still change the plan —
+         * which is this moment, before anything exists.
+         */
+        let criteria: Record<string, string[]> = {};
+        if (opts.criteria) {
+          try {
+            criteria = JSON.parse(opts.criteria);
+          } catch {
+            throw new WorkserError(
+              '--criteria must be JSON mapping each phase name to a list of sentences, e.g. \'{"Checkout":["A customer can pay by card"]}\'',
+            );
+          }
+          const unknown = Object.keys(criteria).filter(
+            (name) => !phases.includes(name),
+          );
+          if (unknown.length) {
+            // Silently dropping these would leave the author believing the
+            // criteria landed on a phase that never carried them.
+            throw new WorkserError(
+              `--criteria names phases that aren't in this goal: ${unknown.join(", ")}. Phases are: ${phases.join(", ")}.`,
+            );
+          }
+        }
+
         const row = await api<Goal>(ctx, "/v1/project-goals", {
           body: {
             projectId: ctx.projectId,
             title: args[0],
             outcome: opts.outcome,
-            phases,
+            phases: phases.map((name) => ({
+              name,
+              criteria: (criteria[name] ?? []).map((text, i) => ({
+                id: `c${i + 1}`,
+                text,
+                met: null,
+              })),
+            })),
             channelId: ctx.projectChannelId,
             sourceMessageId: ctx.projectChannelMessageId,
           },
@@ -144,6 +202,58 @@ export function registerGoal(program: Command): void {
             ),
           );
         });
+      }),
+    );
+
+  /**
+   * QA'S VERDICT — the act that makes "done" checkable rather than asserted.
+   *
+   * A criterion is the owner's sentence about their own world; this records
+   * whether it is true, and what was checked to find out. A tick with no
+   * evidence is worse than no tick: it is a claim they cannot verify, on the
+   * one screen where they are being asked to trust the team. So `--note` is
+   * required on a pass.
+   */
+  goal
+    .command("check <id> <criterionId>")
+    .description('Record whether an acceptance criterion is met')
+    .requiredOption("--phase <name>", "which part of the plan it belongs to")
+    .option("--pass", "it is met")
+    .option("--fail", "it is not met")
+    .option("--reset", "back to unchecked")
+    .option("--note <text>", "what you checked, and how")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const chosen = [opts.pass, opts.fail, opts.reset].filter(Boolean);
+        if (chosen.length !== 1) {
+          throw new WorkserError(
+            "Pass exactly one of --pass, --fail or --reset.",
+          );
+        }
+        if (opts.pass && !opts.note) {
+          throw new WorkserError(
+            "--note is required on a pass: say what you checked. A tick the owner cannot verify is worse than no tick.",
+          );
+        }
+        const met = opts.pass ? true : opts.fail ? false : null;
+        const row = await api<{ recorded?: boolean }>(
+          ctx,
+          `/v1/project-goals/${encodeURIComponent(String(args[0]))}/criteria/${encodeURIComponent(String(args[1]))}`,
+          { method: "POST", body: { phase: opts.phase, met, note: opts.note } },
+        );
+        ok(row, () =>
+          line(
+            row?.recorded
+              ? met === true
+                ? pc.green("recorded — met")
+                : met === false
+                  ? pc.yellow("recorded — not met")
+                  : pc.dim("recorded — back to unchecked")
+              : pc.yellow(
+                  "couldn't record it — check the goal id, the phase name and the criterion id",
+                ),
+          ),
+        );
       }),
     );
 
@@ -179,6 +289,15 @@ export function registerGoal(program: Command): void {
     );
 }
 
+function appScope(g: Goal): string {
+  const n = g.appIds?.length ?? 0;
+  // How many pieces the work has touched so far. Nothing yet is the honest
+  // state of a goal whose shape has been agreed and whose first phase has not
+  // started — not a gap in the data.
+  if (!n) return "";
+  return pc.dim(`  ${n} part${n === 1 ? "" : "s"} of the system`);
+}
+
 function formatGoal(g: Goal): string {
   const where =
     g.currentPhase && g.status !== "delivered"
@@ -186,7 +305,7 @@ function formatGoal(g: Goal): string {
       : "";
   const count =
     g.taskTotal != null ? pc.dim(`  ${g.taskDone}/${g.taskTotal} done`) : "";
-  return `${statusTag(g.status)} ${g.title}${where}${count}  ${pc.dim(g.id)}`;
+  return `${statusTag(g.status)} ${g.title}${appScope(g)}${where}${count}  ${pc.dim(g.id)}`;
 }
 
 function printGoal(g: Goal | null): void {
@@ -213,6 +332,19 @@ function printGoal(g: Goal | null): void {
     line(
       `  ${pc.dim(String(p.index).padStart(2, "0"))} ${p.name}  ${mark}  ${pc.dim(bar)}`,
     );
+    // WHAT DONE MEANS, under the part it belongs to. This list is
+    // simultaneously the requirement, the test plan and the QA report — one
+    // thing rather than three that drift apart.
+    for (const c of p.criteria ?? []) {
+      const tick =
+        c.met === true
+          ? pc.green("✓")
+          : c.met === false
+            ? pc.red("✗")
+            : pc.dim("·");
+      line(`       ${tick} ${c.text}  ${pc.dim(c.id)}`);
+      if (c.note) line(pc.dim(`         ${c.note}`));
+    }
   }
   // The one sentence this whole level exists to produce.
   const current = progress.find((p) => p.name === g.currentPhase);

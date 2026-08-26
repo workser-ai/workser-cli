@@ -43,10 +43,22 @@ const READS = [
   // another project" can only sensibly propose it if it can find out the plan
   // allows two and two already exist.
   "usage",
+  // RECORDING WHAT YOU PRODUCED IS NOT CHANGING THE PROJECT.
+  // Every dispatched role is told, in its own preamble, to run `workser
+  // artifact list` before non-trivial work and `workser artifact add` when it
+  // finishes something the owner should get. Five roles — pm, qa, security,
+  // analyst, sre — were then refused the verb here, so the instruction and the
+  // guard contradicted each other: the agent kept trying to obey an order this
+  // file would not let it obey, and burned its run doing it. It belongs beside
+  // `doc`, `decision` and `board`, which are already in this list and also
+  // have `create` subcommands — these write the project's RECORD, not the
+  // project. What stops a reviewer editing code is its filesystem mode, and
+  // that is untouched.
+  "artifact",
 ];
 
 const BUILDS = [
-  ...READS, "app", "env", "db", "storage", "checkpoint", "artifact", "image",
+  ...READS, "app", "env", "db", "storage", "checkpoint", "image",
   "design", "ask", "sync", "tool", "workflow", "neon", "business",
 ];
 
@@ -79,6 +91,60 @@ const NEVER: Record<string, string> = {
   "task approval": "Only the owner can approve a plan.",
 };
 
+/**
+ * READING IS NEVER REFUSED.
+ *
+ * The verb gate is coarse — it allows or denies `design`, `app`, `db` whole —
+ * and that is right for the verbs whose subcommands all change something. It
+ * is wrong for the ones where a single `show`/`list` sits beside four writes:
+ * a manager asked to write a brief was refused `workser design show`, which
+ * reads the project's own brand and changes nothing. The refusal then told it
+ * to "report what you found instead", which it could not, because it had been
+ * stopped from finding it.
+ *
+ * A role that cannot see the project cannot report on it, and every role in
+ * this product exists to report on something. So these pairs are allowed to
+ * everyone, whatever the verb list says.
+ *
+ * EVERY ENTRY IS A PURE READ, checked against the CLI's own commands. Nothing
+ * here creates, updates, deletes, runs or spends:
+ *
+ *   - `db query` is NOT here. It takes arbitrary SQL, and `DELETE FROM` is a
+ *     query. The verb gate is the only honest answer for it.
+ *   - `tool run`, `app run`, `workflow run`, `artifact run` are not here for
+ *     the same reason: "run" is the write.
+ *   - `env get`/`env list` are not here either. They read, but what they read
+ *     is credentials, and "can look at everything" was never meant to mean
+ *     "can look at the keys".
+ */
+const READ_PAIRS = new Set([
+  // The project's own brand and design notes.
+  "design show",
+  // What exists, and what it is wired to.
+  "app list",
+  "app tools",
+  // Shape, never contents-by-arbitrary-SQL.
+  "db list",
+  "db tables",
+  "db schema",
+  // What is stored, not what is in it.
+  "storage list",
+  "storage ls",
+  "checkpoint list",
+  "workflow list",
+  "workflow get",
+  "workflow runs",
+  "workflow nodes",
+  "tool list",
+  // The business data an analyst exists to read.
+  "business resources",
+  "business list",
+  "business get",
+  // The database service's own inventory.
+  "neon status",
+  "neon list",
+]);
+
 export function assertRoleMayRun(argv: string[]): void {
   const role = (process.env.WORKSER_ROLE ?? "").trim();
   if (!role) return;
@@ -99,6 +165,9 @@ export function assertRoleMayRun(argv: string[]): void {
   ) {
     throw new WorkserError(NEVER[pair], { code: "role_forbidden" });
   }
+
+  // A read is a read, whatever the role — see `READ_PAIRS`.
+  if (READ_PAIRS.has(pair)) return;
 
   const allowed = ROLE_VERBS[role];
   // An unknown role reads and nothing else: the safe failure for a typo in a

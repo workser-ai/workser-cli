@@ -5,6 +5,7 @@ import { api } from "../client.js";
 import { requireProject, type Context } from "../context.js";
 import { ok, line, warn } from "../output.js";
 import { WorkserError } from "../errors.js";
+import type { Goal } from "./goal.js";
 
 /**
  * `workser task` — the AI Tech Team's project tasks and their subtasks.
@@ -122,7 +123,27 @@ export function registerTask(program: Command): void {
         // belongs to, with every sibling and what each of them produced.
         const id = args[0] || ctx.parentTaskId || resolveTaskId(ctx);
         const row = await api<TaskDetail>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}`);
-        ok(row, () => printTask(row));
+        /**
+         * THE PLAN THIS TASK SITS INSIDE, when it sits inside one.
+         *
+         * Fetched here rather than left for the agent to remember to ask for.
+         * The teaching says "when a part finishes, say what it means and offer
+         * the next one" — which was unusable advice, because nothing ever put
+         * the state of the other parts in front of the agent at the moment it
+         * finished. It had to know to go looking, on a turn where it thought it
+         * was done.
+         *
+         * One extra call, only on tasks that belong to a goal. Failure is
+         * silent: the plan is context, and a task must still print without it.
+         */
+        const goalId = (row as { goal_id?: string | null }).goal_id;
+        const goal = goalId
+          ? await api<Goal>(
+              ctx,
+              `/v1/project-goals/${encodeURIComponent(goalId)}`,
+            ).catch(() => null)
+          : null;
+        ok({ ...row, goal }, () => printTask(row, goal));
       }),
     );
 
@@ -244,24 +265,24 @@ export function registerTask(program: Command): void {
    */
   const subtask = task
     .command("subtask")
-    .description("The steps a task is broken into");
+    .description("The subtasks a task is broken into");
 
   subtask
     .command("add <title>")
     .description(
-      'Add one step, e.g. `workser task subtask add "Build the upload screen" --role web`',
+      'Add one subtask, e.g. `workser task subtask add "Build the upload screen" --role web`',
     )
     .option("--task <id>", "the parent task (defaults to the task this run is inside)")
     .option("--role <value>", `who does it (${ROLES.join(" | ")})`)
     .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
-    .option("--note <text>", "one sentence on what this step does")
+    .option("--note <text>", "one sentence on what this subtask does")
     .option(
       "--app <id...>",
-      "the app this step is for — one id runs the step inside that app's folder; leave it off and the step runs at the project, seeing every app",
+      "the app this subtask is for — one id runs it inside that app's folder; leave it off and it runs at the project, seeing every app",
     )
     .option("--infra <ref...>", "shared setup it touches (database | storage | auth | hosting | jobs)")
-    .option("--scope <path...>", "files or folders THIS step owns")
-    .option("--depends-on <id...>", "steps that must finish first (key or id)")
+    .option("--scope <path...>", "files or folders THIS subtask owns")
+    .option("--depends-on <id...>", "subtasks that must finish first (key or id)")
     .action(
       action(async ({ ctx, args, opts }) => {
         const parent = resolveTaskId(ctx, opts.task);
@@ -297,7 +318,7 @@ export function registerTask(program: Command): void {
 
   subtask
     .command("list [taskId]")
-    .description("The steps of a task, in order")
+    .description("The subtasks of a task, in order")
     .action(
       action(async ({ ctx, args }) => {
         const id = resolveTaskId(ctx, args[0]);
@@ -305,7 +326,7 @@ export function registerTask(program: Command): void {
         const rows = row.subtasks ?? [];
         ok(rows, () => {
           if (!rows.length) {
-            line(pc.dim("No steps yet."));
+            line(pc.dim("No subtasks yet."));
             return;
           }
           rows.forEach((r, i) => line(formatSubtask(r, i + 1)));
@@ -315,12 +336,12 @@ export function registerTask(program: Command): void {
 
   subtask
     .command("update <id>")
-    .description("Change a step — its title, its role, what it touches")
+    .description("Change a subtask — its title, its role, what it touches")
     .option("--title <text>")
     .option("--note <text>")
     .option("--role <value>", ROLES.join(" | "))
     .option("--kind <value>", KINDS.join(" | "))
-    .option("--scope <path...>", "replaces the step's scope entirely")
+    .option("--scope <path...>", "replaces the subtask's scope entirely")
     .action(
       action(async ({ ctx, args, opts }) => {
         if (opts.role !== undefined) assertOneOf("--role", opts.role, ROLES);
@@ -345,7 +366,7 @@ export function registerTask(program: Command): void {
 
   subtask
     .command("remove <id>")
-    .description("Drop a step from the plan (only before the work starts)")
+    .description("Remove a subtask (only before the work starts)")
     .action(
       action(async ({ ctx, args }) => {
         await api(ctx, `/v1/project-tasks/${encodeURIComponent(args[0])}`, {
@@ -403,7 +424,7 @@ export function registerTask(program: Command): void {
   task
     .command("resume [id]")
     .description(
-      "Put a step the owner stopped back in the queue — only when they ask you to carry on",
+      "Put a task the owner stopped back in the queue — only when they ask you to carry on",
     )
     .action(
       action(async ({ ctx, args }) => {
@@ -529,7 +550,7 @@ export function registerTask(program: Command): void {
 
   task
     .command("done [id]")
-    .description("Record what a step produced, and move it to ready")
+    .description("Record what a subtask produced, and move it to ready")
     .option("--summary <text>", "what changed, in the owner's words")
     .action(
       action(async ({ ctx, args, opts }) => {
@@ -589,7 +610,7 @@ async function resolveDeps(
     const id = byKey.get(g);
     if (!id) {
       throw new WorkserError(
-        `"${g}" is not a step of this task. Run \`workser task subtask list\` to see them.`,
+        `"${g}" is not a subtask of this task. Run \`workser task subtask list\` to see them.`,
         { code: "bad_request" },
       );
     }
@@ -642,34 +663,81 @@ function formatSubtask(r: ProjectTask, index: number): string {
   return `${head}\n${pc.dim(wrapped)}`;
 }
 
-function printTask(row: TaskDetail): void {
+function printTask(row: TaskDetail, goal?: Goal | null): void {
   line(`${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`);
   line(`${statusTag(row.status)}  approval: ${row.approval_state}`);
   if (row.summary) line(`\n${row.summary}`);
+  if (goal) printGoalContext(row, goal);
   if (row.targets?.length) {
     line(
       `\ntouches: ${row.targets.map((t) => t.appName ?? t.ref ?? t.kind).join(", ")}`,
     );
   }
   if (row.subtasks?.length) {
-    line(`\n${pc.bold("steps")}`);
+    line(`\n${pc.bold("subtasks")}`);
     row.subtasks.forEach((s, i) => line(formatSubtask(s, i + 1)));
     // Where to go next. The summaries above are what a sibling SAID; the
     // artifacts are what it left behind, and an agent that only ever reads
     // prose about a file is guessing at the file.
     line(
       pc.dim(
-        `\nRun \`workser artifact list\` to see what these steps produced,`,
+        `\nRun \`workser artifact list\` to see what these subtasks produced,`,
       ),
     );
     line(
       pc.dim(
-        `or \`workser artifact list --step <id>\` for one step's output alone.`,
+        `or \`workser artifact list --step <id>\` for one subtask's output alone.`,
       ),
     );
   } else {
-    line(pc.dim("\nNo steps yet."));
+    line(pc.dim("\nNo subtasks yet."));
   }
+}
+
+/**
+ * WHERE THIS TASK SITS IN THE PLAN — as a reference, never as a gate.
+ *
+ * The distinction the whole feature turns on, and the reason this block ends
+ * with the sentence it does. Phases do not control anything: a task can be
+ * filed under any part, in any order, and work can begin on any part at any
+ * time. What they buy is the one thing a task runner cannot say — "that part
+ * is finished, this one is sitting there" — and the moment to say it is the
+ * moment a part becomes finishable, which is why this prints on every
+ * `task show` rather than waiting to be asked for.
+ */
+function printGoalContext(row: TaskDetail, goal: Goal): void {
+  const mine = (row as { phase?: string | null }).phase ?? null;
+  line(`\n${pc.bold("part of")}: ${goal.title}`);
+  if (goal.outcome) line(pc.dim(`done means: ${goal.outcome}`));
+
+  const progress = goal.progress ?? [];
+  for (const p of progress) {
+    const where =
+      p.total === 0 ? "not started" : `${p.done} of ${p.total} done`;
+    const here = mine && p.name === mine ? pc.cyan("  <- this task") : "";
+    const mark = p.state === "done" ? pc.green("*") : pc.dim("-");
+    line(`  ${mark} ${p.name} — ${where}${here}`);
+  }
+
+  // The next part, said plainly, so the offer does not have to be worked out.
+  const next = progress.find((p) => p.state !== "done");
+  const running = progress.some((p) => p.state === "working");
+  if (next && !running) {
+    line(
+      pc.dim(
+        `\nNothing is running. The next part waiting is "${next.name}" — offer ` +
+          `it to them in a sentence rather than starting it unasked.`,
+      ),
+    );
+  } else if (!next) {
+    line(pc.dim("\nEvery part of this plan is done. Say so, and offer to wrap it up."));
+  }
+  line(
+    pc.dim(
+      "The plan is a reference for what was agreed, not a rule about what may " +
+        "run. Work can start on any part at any time if they ask for it.",
+    ),
+  );
 }
 
 function statusTag(status: string): string {
