@@ -56,7 +56,7 @@ You operate on **one project's own infrastructure**. You *can* provision and use
 create the Neon database, read its connection string, browse its tables / rows / run
 SQL, provision the bucket + auth, deploy, set env vars, manage files. Sensitive
 actions are **gated** — the daemon may return `error.code = "awaiting_approval"`
-(exit 5) and wait for the user to approve in Orbit; ask them to approve, then retry.
+(exit 5); say so, stop, don't loop (rule 5).
 
 What you **cannot** do is administer the project set or destroy config:
 `project create` · `project use` · `env rm` · `domain set` return
@@ -85,9 +85,10 @@ pick or switch it.
    reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
    user, then continue. Provisioning the *pinned project's own* db / bucket / auth is
    allowed (it may be approval-gated, not owner-only).
-5. **Approvals are normal.** Some allowed actions may return
-   `{"error":{"code":"awaiting_approval"}}` (exit 5) while the user approves in the
-   Orbit UI. Tell the user to approve, then retry — do **not** try to bypass it.
+5. **Approvals are normal — likely unattended, nobody watching.** An action may
+   return `{"error":{"code":"awaiting_approval"}}` (exit 5). Say so, **stop this
+   turn** — never a retry loop or sleep-and-recheck, it just times out. Works next
+   time, once approved.
 6. **Never ask for or store credentials.** Auth is handled by Orbit; you never see keys.
 7. **Verify before "done".** Before telling the user a task is complete, run
    `workser verify --json` (runs the project's typecheck/lint/build). If it
@@ -119,7 +120,7 @@ workser deploy --prod --watch --json              # 8. ship; returns the stable 
   - `unauthorized` → user needs to authenticate.
   - `no_project` → no project is linked here; the user links it in Orbit.
   - `owner_only` → an owner action; tell the user to do it in Orbit, then continue.
-  - `awaiting_approval` → user must approve in Orbit; then retry.
+  - `awaiting_approval` → someone must approve in Orbit; say so, stop, don't poll.
   - `needs_local_app` → this machine has no Workser app, so folder commands
     can't run. Say so; don't reach for `git` instead.
 

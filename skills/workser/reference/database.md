@@ -28,7 +28,8 @@ workser auth status                 # is auth enabled? + Neon auth mode
 - **`db url` is a credential.** Don't print it into the conversation, don't paste it
   into a file the user will commit. The app gets it from its environment already.
 - **Writes are approval-gated.** A `db query` that mutates may return
-  `awaiting_approval` (exit 5). Ask the user to approve in Orbit, then retry.
+  `awaiting_approval` (exit 5). Say it needs approval in Orbit and stop this turn —
+  don't loop or poll waiting for it; the same command works once it's approved.
 - **`DROP` / `TRUNCATE` are refused** by the safety policy. Change schema with a
   migration in the app's own migration folder, not with a destructive one-off.
 - **The database is the project's, not the app's.** Sibling apps in the same project

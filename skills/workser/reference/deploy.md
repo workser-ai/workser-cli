@@ -46,17 +46,19 @@ Settings — `workser env` — are their own topic: `workser help env`.
 - **`promote` and `rollback` are the same upstream call and two commands on
   purpose.** Promote ships the newest build; rollback puts version N back. Both
   ask the owner and return exit 7 (`awaiting_approval`) until they answer — and
-  that gate holds even on a "just do it" run.
+  that gate holds even on a "just do it" run. Say so and stop this turn; don't
+  loop or poll for the answer (see the `awaiting_approval` note below).
 - **There is no `deployments cancel`.** Nothing upstream can stop a build that is
   already running. Wait for it and then promote or roll back.
 - **`--watch` blocks until there's a live URL.** Without it you get a deploy id and
   have to poll `deploy status`.
 - **`domain add` and `domain rm` ask the owner to confirm** and return exit 7
-  (`awaiting_approval`) until they do — tell them to approve, then retry the same
-  command. Domains Workser owns (`workser.ai` and its subdomains) and hostnames
-  the hosting provider assigns (`*.vercel.app`) are refused outright: those are
-  not attachable, and the app's own preview and live URLs already exist without
-  attaching anything.
+  (`awaiting_approval`) until they do — say plainly that it needs approval in
+  Orbit and stop this turn; the same command works on its own once it's approved,
+  so don't write a retry loop or poll for it. Domains Workser owns (`workser.ai`
+  and its subdomains) and hostnames the hosting provider assigns (`*.vercel.app`)
+  are refused outright: those are not attachable, and the app's own preview and
+  live URLs already exist without attaching anything.
 
 ## After a successful deploy
 

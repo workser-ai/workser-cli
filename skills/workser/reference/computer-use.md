@@ -28,8 +28,12 @@ user's machine remotely — you're getting it locally, gated by the same safety 
   destructive commands, rate limits. Refusals are the policy working, not a bug to
   route around.
 - **Sensitive actions are approval-gated.** Writing or deleting files, running a shell
-  command, clicking or typing may return `awaiting_approval` (exit 5) — tell the user
-  to approve in Orbit, then retry.
+  command, clicking or typing may return `awaiting_approval` (exit 5) — this is
+  usually an unattended run, so nobody is necessarily watching for it. Say plainly
+  that it needs approval in Orbit and **stop this turn**. Never write a retry loop,
+  a polling script, or a sleep-and-recheck command around it — that spends the whole
+  run spin-waiting on a click and will simply time out. The same command works on
+  its own, the next time it runs, once approved.
 - **You already have your own tools.** For editing files in this repo, use them. Reach
   for `workser tool` when you need something *outside* the project — the screen, the
   clipboard, a browser, another app on the machine.
