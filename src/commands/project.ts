@@ -108,12 +108,94 @@ export function registerProject(program: Command): void {
           if (merged.productionUrl)
             line(`  production  ${pc.cyan(merged.productionUrl)}`);
           if (!merged.localPath) {
+            // Names the way out. "Link one in Workser Orbit" told an agent to
+            // go and use a screen it cannot see, which is the same as telling
+            // it nothing.
             line(
               pc.dim(
-                "  no folder linked on this computer — link one in Workser Orbit",
+                `  no code on this computer yet — run \`workser project sync ${merged.id ?? id}\``,
               ),
             );
           }
+        });
+      }),
+    );
+
+  /**
+   * BRING AN APP'S CODE DOWN TO THIS COMPUTER.
+   *
+   * ─── WHY AN AGENT NEEDS THIS ────────────────────────────────────────────
+   *
+   * App creation makes a real repository from a starter template, and a
+   * separate step clones it into the app's folder. That second step can fail —
+   * offline, a slow template race, the app quitting between the two — and
+   * until now nothing could redo it from here. `project app <id>` would print
+   * "link one in Workser Orbit", telling an agent to go and use a screen it
+   * has no way to see.
+   *
+   * So the agent is now the one that can fix it: same two daemon calls the
+   * desktop app makes, in the same order.
+   *
+   * ─── IDEMPOTENT, AND IT REFUSES RATHER THAN OVERWRITES ──────────────────
+   *
+   * `prepare` reuses a folder that is already ours and writes the marker; the
+   * seed refuses a directory with its own history (`diverged`) rather than
+   * checking out over somebody's work. Running this on a healthy app is a
+   * no-op that reports the path.
+   */
+  project
+    .command("sync [id]")
+    .description(
+      "Bring an app's code down to this computer — safe to run again; never overwrites local work",
+    )
+    .action(
+      action(async ({ ctx, args }) => {
+        const projectId = requireProject(ctx);
+        const appId = (args[0] as string | undefined) ?? ctx.appId;
+        if (!appId) {
+          throw new Error(
+            "Which app? Pass its id, or run this from inside the app's folder.",
+          );
+        }
+
+        const prepared = await api<{ localPath?: string }>(
+          ctx,
+          `/v1/app-folders/prepare`,
+          {
+            method: "POST",
+            body: { projectId, webAppId: appId, requireSource: true },
+          },
+        );
+        const localPath = prepared?.localPath;
+        if (!localPath) {
+          throw new Error(
+            "Couldn't make a folder for this app on this computer.",
+          );
+        }
+
+        const seeded = await api<{ ok?: boolean; ready?: boolean; message?: string }>(
+          ctx,
+          `/v1/app-folders/seed`,
+          {
+            method: "POST",
+            body: {
+              projectId,
+              webAppId: appId,
+              localPath,
+              requireSource: true,
+            },
+          },
+        );
+
+        ok({ appId, localPath, ...seeded }, () => {
+          if (seeded?.ok === false) {
+            // The daemon's own sentence. "diverged" and "the template is not
+            // ready yet" need different responses from whoever reads this.
+            line(pc.yellow(seeded.message ?? "The code did not arrive."));
+            line(pc.dim(`  folder  ${localPath}`));
+            return;
+          }
+          line(`${pc.green("synced")}  ${localPath}`);
         });
       }),
     );
