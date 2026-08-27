@@ -28,6 +28,14 @@ export interface Context {
   cwd: string;
   projectId?: string;
   /**
+   * Which organization the cwd belongs to, from the folder marker.
+   *
+   * Resolved from where the command IS, never from the spawning run's env —
+   * one user has many orgs and the two can disagree. Absent when the cwd is
+   * outside any Workser folder.
+   */
+  orgId?: string;
+  /**
    * The PROJECT folder this cwd sits under, when the folder identifies one.
    *
    * The project directory is the parent of every app in the project, and it is
@@ -154,18 +162,45 @@ export function buildContext(opts: GlobalOpts): Context {
       : "cloud";
 
   const folder = readFolderIdentity(cwd);
-  // A run always knows its own project; prefer it over the cwd link so an
-  // agent working in a subfolder still records against the right project.
+  /**
+   * WHERE YOU ARE STANDING BEATS WHAT YOU WERE TOLD AT SPAWN.
+   *
+   * ─── THE BUG THIS FIXES ─────────────────────────────────────────────────
+   *
+   * The order used to be `--project` → `WORKSER_PROJECT_ID` → folder, with the
+   * reasoning: "a run always knows its own project; prefer it over the cwd
+   * link so an agent working in a subfolder still records against the right
+   * project."
+   *
+   * The concern was real and the fix was in the wrong place. `readFolderIdentity`
+   * WALKS UP its ancestors, so an agent in `<project>/<app>/src/components`
+   * already resolves the project and the app from the markers above it. Env-first
+   * bought nothing for that case.
+   *
+   * What it did cost: an agent that moves between folders. One user has many
+   * orgs, one org many projects, one project many apps — `WORKSER_PROJECT_ID`
+   * is a snapshot of the DISPATCH, taken once at spawn, while the cwd is where
+   * the command actually is. When they disagreed the env won, and worse, the
+   * next line then found `folder.projectId !== projectId` and dropped the app
+   * as well: the CLI ended up filing against project A with no app while
+   * standing inside project B's app folder.
+   *
+   * So: the folder is the live answer, the env is the fallback for a cwd that
+   * is outside any Workser tree (a scratch directory, `/tmp`), and `--project`
+   * still wins over both because a person said it out loud.
+   */
   const projectId =
     opts.project ||
-    process.env.WORKSER_PROJECT_ID ||
     folder?.projectId ||
+    process.env.WORKSER_PROJECT_ID ||
     session.defaultProjectId;
 
   // Only trust the folder's app when the folder's PROJECT is the one we settled
   // on. Otherwise `--project other-id` run from inside an app would carry that
   // app's id into a project it does not belong to, and the daemon would happily
-  // act on it.
+  // act on it. (With the folder now preferred above, this can only disagree
+  // when `--project` was passed explicitly — which is exactly the case it was
+  // written for.)
   const inThisProject = folder?.projectId === projectId;
 
   const runId = process.env.WORKSER_RUN_ID || undefined;
@@ -187,6 +222,15 @@ export function buildContext(opts: GlobalOpts): Context {
     mode,
     cwd,
     projectId,
+    /**
+     * The ORG the cwd belongs to, from the same marker.
+     *
+     * Read here rather than from `WORKSER_ORGANIZATION_ID` for the same reason
+     * as the project above: a user belongs to several, and the env is a
+     * snapshot of the run that spawned this process, not of the folder the
+     * command is standing in.
+     */
+    orgId: inThisProject ? folder?.orgId : undefined,
     projectRoot: inThisProject ? folder?.projectRoot : undefined,
     appId: inThisProject ? folder?.appId : undefined,
     appName: inThisProject ? folder?.appName : undefined,

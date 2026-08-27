@@ -429,18 +429,41 @@ export function registerTask(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const id = resolveTaskId(ctx, args[0]);
-        const row = await api<{ queued?: boolean }>(
+        const row = await api<{ queued?: boolean; started?: number | null }>(
           ctx,
           `/v1/project-tasks/${encodeURIComponent(id)}/retry`,
           { method: "POST" },
         );
-        ok(row, () =>
+        /**
+         * SAY WHAT HAPPENED, not what might.
+         *
+         * This used to print "it is back in the queue and will start on the
+         * next dispatch" every time — a promise about a future event, made
+         * without knowing whether anything would ever cause it. When nothing
+         * did, an agent read that line, believed the work was moving, and
+         * reported to the owner that it was. The daemon now starts the work
+         * itself and reports how many steps actually began, so the three
+         * outcomes can be told apart instead of collapsed into a hopeful one.
+         */
+        ok(row, () => {
+          if (!row?.queued) {
+            line(pc.yellow("could not resume it — check the step id"));
+            return;
+          }
+          const started = row.started ?? 0;
+          if (started > 0) {
+            line(
+              `${pc.green("resumed")} — ${started} step${started === 1 ? "" : "s"} started`,
+            );
+            return;
+          }
+          // Queued, nothing started. Usually the approval gate, sometimes
+          // every remaining step waiting on one still running. Both are real
+          // states and neither is "it will start soon".
           line(
-            row?.queued
-              ? `${pc.green("resumed")} — it is back in the queue and will start on the next dispatch`
-              : pc.yellow("could not resume it — check the step id"),
-          ),
-        );
+            `${pc.green("resumed")} — it is queued, but nothing started yet. Check the plan is approved and that no step is blocking the rest.`,
+          );
+        });
       }),
     );
 
@@ -495,6 +518,49 @@ export function registerTask(program: Command): void {
           { method: "POST" },
         );
         ok(row, () => line(pc.green("approved — you may start")));
+      }),
+    );
+
+  /**
+   * START THE WORK — the verb that was missing.
+   *
+   * Filing a plan and having it approved used to leave a manager with nothing
+   * to do but ask the owner to press a button on a screen they were not
+   * looking at. This is the button.
+   *
+   * It does NOT skip approval — the daemon asks the same gate `can-start`
+   * asks, and starts nothing on a plan the owner has not approved. Run it
+   * after approval, and again whenever a step finishes and the next one
+   * should pick up.
+   */
+  task
+    .command("start [id]")
+    .description(
+      "Start the steps this task is ready to run — only works once the owner has approved the plan",
+    )
+    .action(
+      action(async ({ ctx, args }) => {
+        const id = resolveTaskId(ctx, args[0]);
+        const row = await api<{ started?: number | null; note?: string | null }>(
+          ctx,
+          `/v1/project-tasks/${encodeURIComponent(id)}/start`,
+          { method: "POST" },
+        );
+        ok(row, () => {
+          const started = row?.started ?? null;
+          if (started && started > 0) {
+            line(
+              pc.green(
+                `started ${started} step${started === 1 ? "" : "s"} — they are running now`,
+              ),
+            );
+            return;
+          }
+          // Never "started" when nothing was. The whole reason this verb
+          // exists is that a hopeful message got believed and repeated to the
+          // owner as fact.
+          line(pc.yellow(row?.note ?? "Nothing started."));
+        });
       }),
     );
 
