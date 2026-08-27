@@ -203,7 +203,7 @@ function requireApp(app: unknown): string {
   const value = typeof app === "string" ? app.trim() : "";
   if (value) return value;
   throw new WorkserError(
-    "Which service? Pass --app <webAppId>; `workser app list` shows them.",
+    "Which service? Pass --app <webAppId>; `workser project apps` shows them.",
     { code: "bad_request" },
   );
 }

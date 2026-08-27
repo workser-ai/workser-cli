@@ -157,7 +157,7 @@ and the spec is the difference.
     topic: "automation",
     title: "Workflows & connected apps",
     summary: "Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.",
-    commands: ["workflow","app"],
+    commands: ["workflow","connection"],
     source: "skills/workser/reference/automation.md",
     body: `# Workflows & connected apps
 
@@ -170,10 +170,11 @@ workser workflow activate <id> | deactivate <id> | run <id> [--wait] [--body <js
 workser workflow runs <id>          # past executions of a workflow
 workser workflow nodes [query]      # search the node-type catalog
 
-workser app list [--toolkit <slug>] # connectable + connected third-party apps
-workser app connect <toolkit> | disconnect <connectionId>
-workser app tools <toolkit>         # a connected app's callable actions
-workser app run <toolSlug> [--body <json>]  # execute one action
+workser connection list [--toolkit <slug>]  # connectable + connected third-party apps
+workser connection search "<query>" [--toolkit <slug>] [--limit N]  # find an action across every toolkit
+workser connection connect <toolkit> | disconnect <connectionId>
+workser connection tools <toolkit>          # browse one connected toolkit's actions
+workser connection run <toolSlug> [--body <json>]  # execute one action
 \`\`\`
 
 ## Building a workflow
@@ -189,12 +190,13 @@ Created workflows start inactive: \`workser workflow activate <id>\` when it's r
 
 ## Using a connected app
 
-1. \`workser app list\` — check what's already connected before asking for anything.
-2. If it isn't: \`workser app connect <toolkit>\` returns an OAuth link. The **user**
+1. \`workser connection list\` — check what's already connected before asking for anything.
+2. If it isn't: \`workser connection connect <toolkit>\` returns an OAuth link. The **user**
    must open it; you cannot complete OAuth on their behalf. Wait, then continue.
-3. \`workser app tools <toolkit>\` — read the argument schema rather than guessing
-   field names.
-4. \`workser app run <toolSlug> --body '{"…":…}'\` — e.g. \`GOOGLESHEETS_APPEND_ROW\`,
+3. Don't know the exact action? \`workser connection search "<query>"\` finds it across
+   every toolkit; \`workser connection tools <toolkit>\` browses one toolkit you already
+   know. Either way, read the argument schema rather than guessing field names.
+4. \`workser connection run <toolSlug> --body '{"…":…}'\` — e.g. \`GOOGLESHEETS_APPEND_ROW\`,
    \`GMAIL_SEND_EMAIL\`.
 
 **A \`run\` is a real side effect in someone's real account.** Sending an email or
@@ -929,11 +931,11 @@ up front — most of the apps a goal will touch don't exist when it's proposed.
   },
   {
     topic: "images",
-    title: "Image generation",
-    summary: "Generate images from a prompt, optionally conditioned on existing images.",
-    commands: ["image"],
+    title: "Image generation & media understanding",
+    summary: "Generate images from a prompt; describe/transcribe an image, video, or audio clip you can't natively see or hear.",
+    commands: ["image","video","audio"],
     source: "skills/workser/reference/images.md",
-    body: `# Image generation
+    body: `# Image generation & media understanding
 
 \`\`\`
 workser image generate "<prompt>"            # alias: workser image gen
@@ -949,7 +951,7 @@ workser image generate "flat illustration of a farm delivery van, brand colors" 
 workser image gen "same van, from the side" -r https://… -o ./public/van.png --json
 \`\`\`
 
-## Notes that matter
+## Notes that matter (generation)
 
 - **Reference images are image-to-image conditioning**, not attachments. Up to 4;
   anything beyond that is dropped.
@@ -961,6 +963,42 @@ workser image gen "same van, from the side" -r https://… -o ./public/van.png -
   exist only as URLs.
 - **Placeholder art is not a deliverable.** Generating a hero image to unblock a
   layout is fine; shipping it as the user's brand asset without asking is not.
+
+## Understanding media you can't natively see or hear
+
+The fallback for a text-only model, or media you have no other way to reach: describe
+an image, summarize/transcribe a video, transcribe/describe audio. Runs server-side
+(Gemini) — you never need a model key.
+
+\`\`\`
+workser image understand "<query>" [--url <u> | --file <p>] [-t <task>]
+workser video understand "<query>" [--url <u> | --file <p>] [-t <task>]
+workser audio understand "<query>" [--url <u> | --file <p>] [-t <task>]
+\`\`\`
+
+\`\`\`bash
+workser image understand "what's wrong with this layout?" --url https://…/screenshot.png --json
+workser video understand "what happens at the end?" --url https://youtu.be/… -t timestamp_analysis --json
+workser audio understand "transcribe this" --file ./voicemail.m4a -t transcribe --json
+\`\`\`
+
+## Notes that matter (understanding)
+
+- **\`--url\` vs \`--file\`**: \`--url\` is fetched server-side with no size ceiling — the
+  right choice for anything already hosted (a project's own storage bucket, a public
+  link, a YouTube URL for video/audio). \`--file\` is read and sent inline by the CLI
+  itself, so it's bounded by the daemon's own request-size limit — for a small local
+  file only (a screenshot, a short voice memo). Something bigger: \`workser storage
+  upload\` it first, then pass the returned URL with \`--url\`.
+- **\`-t/--task\` shapes the answer, it doesn't gate what you can ask** — \`general\` (the
+  default) takes any free-form \`<query>\`. The other values just bias the prompt
+  toward a specific shape: \`caption\`/\`visual_qa\`/\`object_detection\`/\`segmentation\`
+  for images; \`summarize\`/\`describe\`/\`visual_qa\`/\`timestamp_analysis\` for video;
+  \`transcribe\`/\`describe\`/\`audio_qa\`/\`speaker_diarization\`/\`emotion_detection\` for
+  audio.
+- **This is billed to the project's organization**, same as image generation — it's
+  a real provider call, not free introspection. Don't loop it over every file in a
+  folder "just in case"; use it when you actually need to know what's in one.
 `,
   },
   {

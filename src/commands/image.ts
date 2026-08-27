@@ -6,6 +6,7 @@ import { api } from "../client.js";
 import { requireProject, type Context } from "../context.js";
 import { ok, line, success, info } from "../output.js";
 import { WorkserError } from "../errors.js";
+import { resolveMediaSource } from "../media-source.js";
 
 /**
  * `workser image` — generate images from a prompt.
@@ -115,6 +116,30 @@ export function registerImage(program: Command): void {
           // comment often says what it changed or could not do.
           for (const text of res.texts ?? []) line(text);
         });
+      }),
+    );
+
+  image
+    .command("understand <query>")
+    .description(
+      "Describe/caption/answer questions about an image — the fallback for a text-only model or an image you have no other way to see",
+    )
+    .option("-u, --url <url>", "the image's URL (fetched server-side)")
+    .option("-f, --file <path>", "a local image file (read + sent inline; small files only)")
+    .option(
+      "-t, --task <task>",
+      "caption | visual_qa | object_detection | segmentation | general",
+      "general",
+    )
+    .action(
+      action(async ({ ctx, opts, args }) => {
+        const projectId = requireProject(ctx as Context);
+        const source = await resolveMediaSource({ url: opts.url, file: opts.file });
+        const res = await api(ctx as Context, `/projects/${projectId}/images/understand`, {
+          method: "POST",
+          body: { source, query: args[0], task: opts.task },
+        });
+        ok(res, () => line(res?.answer ?? ""));
       }),
     );
 }

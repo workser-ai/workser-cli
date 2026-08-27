@@ -2,7 +2,7 @@
 topic: automation
 title: Workflows & connected apps
 summary: Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.
-commands: [workflow, app]
+commands: [workflow, connection]
 ---
 
 # Workflows & connected apps
@@ -16,10 +16,11 @@ workser workflow activate <id> | deactivate <id> | run <id> [--wait] [--body <js
 workser workflow runs <id>          # past executions of a workflow
 workser workflow nodes [query]      # search the node-type catalog
 
-workser app list [--toolkit <slug>] # connectable + connected third-party apps
-workser app connect <toolkit> | disconnect <connectionId>
-workser app tools <toolkit>         # a connected app's callable actions
-workser app run <toolSlug> [--body <json>]  # execute one action
+workser connection list [--toolkit <slug>]  # connectable + connected third-party apps
+workser connection search "<query>" [--toolkit <slug>] [--limit N]  # find an action across every toolkit
+workser connection connect <toolkit> | disconnect <connectionId>
+workser connection tools <toolkit>          # browse one connected toolkit's actions
+workser connection run <toolSlug> [--body <json>]  # execute one action
 ```
 
 ## Building a workflow
@@ -35,12 +36,13 @@ Created workflows start inactive: `workser workflow activate <id>` when it's rea
 
 ## Using a connected app
 
-1. `workser app list` — check what's already connected before asking for anything.
-2. If it isn't: `workser app connect <toolkit>` returns an OAuth link. The **user**
+1. `workser connection list` — check what's already connected before asking for anything.
+2. If it isn't: `workser connection connect <toolkit>` returns an OAuth link. The **user**
    must open it; you cannot complete OAuth on their behalf. Wait, then continue.
-3. `workser app tools <toolkit>` — read the argument schema rather than guessing
-   field names.
-4. `workser app run <toolSlug> --body '{"…":…}'` — e.g. `GOOGLESHEETS_APPEND_ROW`,
+3. Don't know the exact action? `workser connection search "<query>"` finds it across
+   every toolkit; `workser connection tools <toolkit>` browses one toolkit you already
+   know. Either way, read the argument schema rather than guessing field names.
+4. `workser connection run <toolSlug> --body '{"…":…}'` — e.g. `GOOGLESHEETS_APPEND_ROW`,
    `GMAIL_SEND_EMAIL`.
 
 **A `run` is a real side effect in someone's real account.** Sending an email or

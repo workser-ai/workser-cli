@@ -6,18 +6,20 @@ import { requireProject } from "../context.js";
 import { ok, line } from "../output.js";
 
 /**
- * Third-party app integrations (Composio) for the project — connect an app
- * once, then call any of its tools. Reference-ID-scoped, the same surface a
- * project's own generated web app calls at runtime with its business API key,
- * so connections stay properly scoped to this project rather than one shared
- * platform credential.
+ * Third-party app connections (Composio, under the hood — named `connection`
+ * here rather than after the provider, and distinct from Workser's OWN "app"
+ * concept, i.e. the web/mobile apps a project builds) for the project:
+ * connect one once, then search/browse/execute its tools. Reference-ID-scoped,
+ * the same surface a project's own generated web app calls at runtime with
+ * its business API key, so connections stay properly scoped to this project
+ * rather than one shared platform credential.
  */
-export function registerApp(program: Command): void {
-  const appCmd = program
-    .command("app")
-    .description("Connect and use third-party app integrations (Gmail, Slack, Stripe, ...)");
+export function registerConnection(program: Command): void {
+  const connection = program
+    .command("connection")
+    .description("Connect and use third-party app connections (Gmail, Slack, Stripe, ...)");
 
-  appCmd
+  connection
     .command("list")
     .description("List connectable toolkits and this project's existing connections")
     .option("--toolkit <slug>", "filter connections to one toolkit")
@@ -38,7 +40,27 @@ export function registerApp(program: Command): void {
       }),
     );
 
-  appCmd
+  connection
+    .command("search <query>")
+    .description("Full-text search for actions across every toolkit (or one, with --toolkit) — e.g. \"send email\"")
+    .option("--toolkit <slug>", "narrow the search to one toolkit")
+    .option("--limit <n>", "max results")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const projectId = requireProject(ctx);
+        const items = await api(ctx, `/v1/projects/${projectId}/integrations/search`, {
+          query: { q: args[0], toolkit: opts.toolkit, limit: opts.limit },
+        });
+        ok(items, () => {
+          if (!items?.length) return line(pc.dim("No matching actions."));
+          for (const t of items) {
+            line(`${t.slug}  ${pc.dim(`[${t.toolkit}]`)}  ${t.description ?? ""}`);
+          }
+        });
+      }),
+    );
+
+  connection
     .command("connect <toolkit>")
     .description("Start OAuth to connect a toolkit")
     .option("--reference-user-id <id>", "connect on behalf of one of the app's own end-users")
@@ -61,7 +83,7 @@ export function registerApp(program: Command): void {
       }),
     );
 
-  appCmd
+  connection
     .command("disconnect <connectionId>")
     .description("Disconnect a connection")
     .action(
@@ -74,7 +96,7 @@ export function registerApp(program: Command): void {
       }),
     );
 
-  appCmd
+  connection
     .command("tools <toolkit>")
     .description("List a connected toolkit's callable tools + their arguments")
     .action(
@@ -88,7 +110,7 @@ export function registerApp(program: Command): void {
       }),
     );
 
-  appCmd
+  connection
     .command("run <toolSlug>")
     .description("Execute one tool action (e.g. GOOGLESHEETS_APPEND_ROW)")
     .option("--body <args>", "the tool's arguments as a JSON string", "{}")

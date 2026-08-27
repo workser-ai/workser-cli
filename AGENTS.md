@@ -71,10 +71,11 @@ workser workflow list | create <name> [--body <json>] | get <id>
 workser workflow activate <id> | deactivate <id> | run <id> [--wait] [--body <json>]
 workser workflow runs <id>                    # past executions of a workflow
 workser workflow nodes [query]                # search the node-type catalog
-workser app list [--toolkit <slug>]           # connectable + connected third-party apps
-workser app connect <toolkit> | disconnect <connectionId>
-workser app tools <toolkit>                   # a connected app's callable actions
-workser app run <toolSlug> [--body <json>]    # execute one action (e.g. GOOGLESHEETS_APPEND_ROW)
+workser connection list [--toolkit <slug>]           # connectable + connected third-party apps
+workser connection search "<query>" [--toolkit <slug>] [--limit N]  # full-text search across every toolkit's actions
+workser connection connect <toolkit> | disconnect <connectionId>
+workser connection tools <toolkit>                   # browse one connected toolkit's callable actions
+workser connection run <toolSlug> [--body <json>]    # execute one action (e.g. GOOGLESHEETS_APPEND_ROW)
 
 workser tool list                             # computer-use tools available to you now
 workser tool run <name> [--body <json>]       # filesystem/shell/screenshot/input/clipboard/browser
@@ -86,6 +87,16 @@ workser memory forget <memoryId>                    # soft-delete an outdated/in
 workser artifact add <path> [--kind <k>] [-d <text>]  # record a finished deliverable
 workser artifact add --url <url> --kind app          # record a deployed app
 workser artifact run                                 # which task you're attached to
+
+workser search "<query>" [-n <maxResults>]           # Google-grounded web search
+
+workser image generate "<prompt>" [-r <url>...] [-o <path>]  # generate an image, get a public URL
+workser image understand "<query>" [--url <u>|--file <p>] [-t <task>]  # describe/caption/answer questions about an image
+workser video understand "<query>" [--url <u>|--file <p>] [-t <task>]  # summarize/describe a video (URL also accepts YouTube)
+workser audio understand "<query>" [--url <u>|--file <p>] [-t <task>]  # transcribe/describe audio (URL also accepts YouTube)
+# image/video/audio understand: the fallback for a text-only model, or media you have no other
+# way to see/hear. --url is fetched server-side (no size ceiling); --file reads a small local
+# file and sends it inline — for anything bigger, `workser storage upload` it and pass --url.
 
 workser ask "<question>" [--type <t>] [--option <o>] # ask the user, WAIT for the answer
 
@@ -215,11 +226,14 @@ done: `workser workflow create` builds an event-driven, multi-step automation (t
 same engine Workser's own web Workflow tab uses) — nodes, connections, and triggers go
 in `--body` as JSON; browse `workser workflow nodes` first to see what's available.
 Before an automation can use a third-party app (Gmail, Slack, Stripe, Google Sheets,
-...), the user connects it once via `workser app connect <toolkit>` (this opens an
-OAuth link — ask the user to complete it, then continue); after that, `workser app
-run <toolSlug> --body '{"...":...}'` calls any of its actions directly, and a workflow
-node can call the same toolkit. Use `workser app list` to see what's already
-connected before assuming you need to ask the user to connect something new.
+...), the user connects it once via `workser connection connect <toolkit>` (this opens
+an OAuth link — ask the user to complete it, then continue); after that, `workser
+connection run <toolSlug> --body '{"...":...}'` calls any of its actions directly, and
+a workflow node can call the same toolkit. Use `workser connection list` to see what's
+already connected before assuming you need to ask the user to connect something new.
+Don't know the exact action slug? `workser connection search "<what you want to do>"`
+searches across every toolkit's actions at once — cheaper than browsing toolkit by
+toolkit with `workser connection tools <toolkit>`.
 
 ## Delegate to roles
 The user can configure **roles** — named specialists each backed by a local CLI agent
