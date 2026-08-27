@@ -455,8 +455,12 @@ user's machine remotely — you're getting it locally, gated by the same safety 
   destructive commands, rate limits. Refusals are the policy working, not a bug to
   route around.
 - **Sensitive actions are approval-gated.** Writing or deleting files, running a shell
-  command, clicking or typing may return \`awaiting_approval\` (exit 5) — tell the user
-  to approve in Orbit, then retry.
+  command, clicking or typing may return \`awaiting_approval\` (exit 5) — this is
+  usually an unattended run, so nobody is necessarily watching for it. Say plainly
+  that it needs approval in Orbit and **stop this turn**. Never write a retry loop,
+  a polling script, or a sleep-and-recheck command around it — that spends the whole
+  run spin-waiting on a click and will simply time out. The same command works on
+  its own, the next time it runs, once approved.
 - **You already have your own tools.** For editing files in this repo, use them. Reach
   for \`workser tool\` when you need something *outside* the project — the screen, the
   clipboard, a browser, another app on the machine.
@@ -491,7 +495,8 @@ workser auth status                 # is auth enabled? + Neon auth mode
 - **\`db url\` is a credential.** Don't print it into the conversation, don't paste it
   into a file the user will commit. The app gets it from its environment already.
 - **Writes are approval-gated.** A \`db query\` that mutates may return
-  \`awaiting_approval\` (exit 5). Ask the user to approve in Orbit, then retry.
+  \`awaiting_approval\` (exit 5). Say it needs approval in Orbit and stop this turn —
+  don't loop or poll waiting for it; the same command works once it's approved.
 - **\`DROP\` / \`TRUNCATE\` are refused** by the safety policy. Change schema with a
   migration in the app's own migration folder, not with a destructive one-off.
 - **The database is the project's, not the app's.** Sibling apps in the same project
@@ -655,17 +660,19 @@ Settings — \`workser env\` — are their own topic: \`workser help env\`.
 - **\`promote\` and \`rollback\` are the same upstream call and two commands on
   purpose.** Promote ships the newest build; rollback puts version N back. Both
   ask the owner and return exit 7 (\`awaiting_approval\`) until they answer — and
-  that gate holds even on a "just do it" run.
+  that gate holds even on a "just do it" run. Say so and stop this turn; don't
+  loop or poll for the answer (see the \`awaiting_approval\` note below).
 - **There is no \`deployments cancel\`.** Nothing upstream can stop a build that is
   already running. Wait for it and then promote or roll back.
 - **\`--watch\` blocks until there's a live URL.** Without it you get a deploy id and
   have to poll \`deploy status\`.
 - **\`domain add\` and \`domain rm\` ask the owner to confirm** and return exit 7
-  (\`awaiting_approval\`) until they do — tell them to approve, then retry the same
-  command. Domains Workser owns (\`workser.ai\` and its subdomains) and hostnames
-  the hosting provider assigns (\`*.vercel.app\`) are refused outright: those are
-  not attachable, and the app's own preview and live URLs already exist without
-  attaching anything.
+  (\`awaiting_approval\`) until they do — say plainly that it needs approval in
+  Orbit and stop this turn; the same command works on its own once it's approved,
+  so don't write a retry loop or poll for it. Domains Workser owns (\`workser.ai\`
+  and its subdomains) and hostnames the hosting provider assigns (\`*.vercel.app\`)
+  are refused outright: those are not attachable, and the app's own preview and
+  live URLs already exist without attaching anything.
 
 ## After a successful deploy
 
