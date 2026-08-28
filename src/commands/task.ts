@@ -5,6 +5,7 @@ import { api } from "../client.js";
 import { requireProject, type Context } from "../context.js";
 import { ok, line, warn } from "../output.js";
 import { WorkserError } from "../errors.js";
+import { assertDelegatableModel } from "../model-policy.js";
 import type { Goal } from "./goal.js";
 
 /**
@@ -44,10 +45,76 @@ const STATUSES = [
   "archived",
 ] as const;
 
-/** The roles the dispatcher can actually run today. */
-const ROLES = ["pm", "architect", "web", "api", "automation", "qa"] as const;
+/**
+ * The roles the dispatcher can actually run.
+ *
+ * THIS LIST WAS SIX NAMES LONG AND THE DISPATCHER HAS THIRTEEN. `--role mobile`
+ * and `--role python` — two of the app types this product is built around —
+ * were refused at the keyboard, so a manager planning a phone app had to file
+ * its steps as `web` and a data script as `api`. The work still ran; it ran as
+ * the wrong teammate, with the wrong briefing and the wrong permissions, and
+ * nothing on screen said so.
+ *
+ * Kept in the same order as core-api's `TASK_ROLES`, which is the list the API
+ * validates against — a name here that is not there is a 400 nobody can read,
+ * and a name there that is missing here is this bug again.
+ */
+const ROLES = [
+  "pm",
+  "architect",
+  "designer",
+  "web",
+  "api",
+  "mobile",
+  "python",
+  "automation",
+  "qa",
+  "devops",
+  "sre",
+  "security",
+  "analyst",
+] as const;
+
+/**
+ * WHO A STEP RUNS ON, when the manager overrides the configured team.
+ *
+ * The step row has carried `agent_override` / `agent_model_override` /
+ * `agent_effort_override` since the runner learned to honour them, and nothing
+ * but the desktop's picker could ever set one — so the manager, the only party
+ * that knows what each step actually is, could choose a teammate and not the
+ * engine that teammate runs on. These flags are that half of the decision.
+ *
+ * The list is what the daemon can dispatch. It is validated here so a typo
+ * fails at the keyboard with the reason, rather than at dispatch time as a CLI
+ * that does not exist.
+ */
+const AGENTS = [
+  "claude_code",
+  "codex",
+  "workser_code",
+  "opencode",
+  "cursor",
+  "gemini",
+] as const;
+
+/**
+ * Effort levels every agent that takes one accepts.
+ *
+ * `ultra` is Codex-only and deliberately absent: a level one CLI rejects is a
+ * failed turn mid-run, and this list is shared across all of them.
+ */
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 
 /** What a step produces, in the board's own vocabulary. */
+/**
+ * What a step produces, in the board's own vocabulary.
+ *
+ * Six, and deliberately fewer than the app types: a `worker`, a `cron` job and
+ * an `ai-agent` app are all `service` or `automation` work here, and the step's
+ * `--app` already says which app it is for and therefore what it really is.
+ * The mapping is spelled out in the flag's help below, because a manager
+ * guessing at it files the same kind of work under two names on two days.
+ */
 const KINDS = [
   "data_reports",
   "web",
@@ -56,6 +123,10 @@ const KINDS = [
   "automation",
   "docs",
 ] as const;
+
+/** Which kind an app of each type takes, said once so both flags can say it. */
+const KIND_HELP =
+  "what it produces (web app → web · phone app → mobile · api or ai-agent → service · worker or scheduled job → automation · report or analysis → data_reports · written page → docs)";
 
 interface TaskTarget {
   kind: string;
@@ -180,7 +251,7 @@ export function registerTask(program: Command): void {
     .command("create <title>")
     .description("Open a new root task for the project team")
     .option("--note <text>", "context, constraints and expected outcome")
-    .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
+    .option("--kind <value>", KIND_HELP)
     .option("--label <value...>", "labels to put on the task")
     .option("--app <id...>", "apps the task touches")
     .option("--infra <ref...>", "shared setup it touches")
@@ -307,7 +378,7 @@ export function registerTask(program: Command): void {
       "the parent task (defaults to the task this run is inside)",
     )
     .option("--role <value>", `who does it (${ROLES.join(" | ")})`)
-    .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
+    .option("--kind <value>", KIND_HELP)
     .option("--note <text>", "one sentence on what this subtask does")
     .option(
       "--app <id...>",
@@ -322,11 +393,23 @@ export function registerTask(program: Command): void {
       "--depends-on <id...>",
       "subtasks that must finish first (key or id)",
     )
+    .option(
+      "--agent <id>",
+      `run this step on a specific CLI (${AGENTS.join(" | ")}) instead of the role's own`,
+    )
+    .option("--model <id>", "the model that CLI should use for this step")
+    .option("--effort <level>", `how hard it thinks (${EFFORTS.join(" | ")})`)
     .action(
       action(async ({ ctx, args, opts }) => {
         const parent = resolveTaskId(ctx, opts.task);
         if (opts.role !== undefined) assertOneOf("--role", opts.role, ROLES);
         if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
+        if (opts.agent !== undefined) assertOneOf("--agent", opts.agent, AGENTS);
+        if (opts.effort !== undefined)
+          assertOneOf("--effort", opts.effort, EFFORTS);
+        // The price gate — see `model-policy.ts`. Refused here, where whoever
+        // asked can still choose again, rather than at dispatch as a failed run.
+        assertDelegatableModel("--model", opts.model);
 
         // Dependencies are given as keys because that is what an agent has read
         // off `task show`; the API wants ids. Resolved here rather than pushed
@@ -354,11 +437,45 @@ export function registerTask(program: Command): void {
             ],
           },
         });
-        ok(row, () => {
+        /**
+         * A SECOND CALL, and it has to be: create takes the plan, and the
+         * runner overrides live on the update contract (a step's engine is a
+         * decision ABOUT the step, changeable right up until it starts). Only
+         * made when something was actually asked for, so the common case is
+         * still one request.
+         */
+        const runner =
+          opts.agent !== undefined ||
+          opts.model !== undefined ||
+          opts.effort !== undefined
+            ? await api<ProjectTask>(
+                ctx,
+                `/v1/project-tasks/${encodeURIComponent(row.id)}`,
+                {
+                  method: "PATCH",
+                  body: {
+                    agentOverride: opts.agent,
+                    agentModelOverride: opts.model,
+                    agentEffortOverride: opts.effort,
+                  },
+                },
+              )
+            : null;
+
+        ok(runner ?? row, () => {
           line(
             `${pc.green("added")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`,
           );
           if (row.role) line(pc.dim(`role: ${row.role}`));
+          if (runner) {
+            line(
+              pc.dim(
+                `runs on: ${[opts.agent, opts.model, opts.effort]
+                  .filter(Boolean)
+                  .join(" · ")}`,
+              ),
+            );
+          }
         });
       }),
     );
@@ -392,10 +509,32 @@ export function registerTask(program: Command): void {
     .option("--role <value>", ROLES.join(" | "))
     .option("--kind <value>", KINDS.join(" | "))
     .option("--scope <path...>", "replaces the subtask's scope entirely")
+    .option(
+      "--agent <id>",
+      `run this step on a specific CLI (${AGENTS.join(" | ")}); "default" hands it back to the role's own`,
+    )
+    .option("--model <id>", 'the model that CLI should use; "default" clears it')
+    .option(
+      "--effort <level>",
+      `how hard it thinks (${EFFORTS.join(" | ")}); "default" clears it`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         if (opts.role !== undefined) assertOneOf("--role", opts.role, ROLES);
         if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
+        // `default` is the word for "stop overriding", and it sends `null` —
+        // which is what the API reads as "hand this back to the role". Without
+        // it an override could be set and never taken off from here.
+        if (opts.agent !== undefined && opts.agent !== "default")
+          assertOneOf("--agent", opts.agent, AGENTS);
+        if (opts.effort !== undefined && opts.effort !== "default")
+          assertOneOf("--effort", opts.effort, EFFORTS);
+        // `default` clears the override and is never a model name, so it is
+        // safe to check the same way the other flags are.
+        if (opts.model !== "default")
+          assertDelegatableModel("--model", opts.model);
+        const clearable = (value?: string) =>
+          value === undefined ? undefined : value === "default" ? null : value;
         const row = await api<ProjectTask>(
           ctx,
           `/v1/project-tasks/${encodeURIComponent(args[0])}`,
@@ -407,6 +546,9 @@ export function registerTask(program: Command): void {
               role: opts.role,
               category: opts.kind,
               scopePaths: opts.scope,
+              agentOverride: clearable(opts.agent),
+              agentModelOverride: clearable(opts.model),
+              agentEffortOverride: clearable(opts.effort),
             },
           },
         );

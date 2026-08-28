@@ -66,6 +66,17 @@ workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)
 workser decision create "Carts live server-side" --context "…" --decision "…" --json
 ```
 
+**A wrong row is edited, not replaced.** If a subtask's title, teammate, note or
+scope is wrong after you created it, fix that same row:
+
+```bash
+workser task subtask update <id> --title "…" --role api --note "…" --scope "src/api"
+```
+
+Never tell the user a subtask is locked, and never file a second one alongside
+the wrong one — a plan with a duplicate phase in it is a plan nobody can read
+the progress of.
+
 **Don't pass `--work-item` for a multi-phase plan.** A linked document renders on
 its card and is *hidden* from the Docs panel; a plan spanning three phases
 belongs to the project, not to phase 1.

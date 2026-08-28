@@ -125,6 +125,60 @@ describe("request shapes + --json envelope", () => {
   // Env is app-scoped (1 app = 1 repo = 1 Vercel project). `--app` targets one;
   // omitting it keeps the server's primary-app default, so the three tests
   // above must continue to send NO webAppId — that's the back-compat contract.
+  it("key list → GET /v1/apps/:appId/keys (redacted)", async () => {
+    const r = await cli(["key", "list", "--app", "wa_2"]);
+    expect(r.code).toBe(0);
+    const req = stub.lastRequest!;
+    expect(req.method).toBe("GET");
+    expect(req.path).toBe("/v1/apps/wa_2/keys");
+    expect(r.json.data[0]).toMatchObject({ environment: "production", prefix: "wsgw_live_ab12cd" });
+    expect(r.json.data[0]).not.toHaveProperty("key");
+  });
+
+  it("key rotate AI_GATEWAY_API_KEY → POST .../keys/:key/rotate {environment}", async () => {
+    const r = await cli([
+      "key",
+      "rotate",
+      "AI_GATEWAY_API_KEY",
+      "--app",
+      "wa_2",
+      "--env",
+      "production",
+    ]);
+    expect(r.code).toBe(0);
+    const req = stub.lastRequest!;
+    expect(req.method).toBe("POST");
+    expect(req.path).toBe("/v1/apps/wa_2/keys/AI_GATEWAY_API_KEY/rotate");
+    expect(req.body).toEqual({ environment: "production" });
+    expect(r.json.data.key).toMatch(/^wsgw_live_/);
+  });
+
+  it("key rotate BETTER_AUTH_SECRET → no --env required, no secret echoed back", async () => {
+    const r = await cli(["key", "rotate", "BETTER_AUTH_SECRET", "--app", "wa_2"]);
+    expect(r.code).toBe(0);
+    expect(r.json.data).toEqual({ rotated: true });
+  });
+
+  it("key rotate rejects an unknown --env value before calling the daemon", async () => {
+    const r = await cli([
+      "key",
+      "rotate",
+      "AI_GATEWAY_API_KEY",
+      "--app",
+      "wa_2",
+      "--env",
+      "staging",
+    ]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.code).toBe("bad_input");
+  });
+
+  it("key rotate with no --app and no linked folder refuses rather than guessing", async () => {
+    const r = await cli(["key", "rotate", "AI_GATEWAY_API_KEY", "--env", "production"]);
+    expect(r.code).not.toBe(0);
+    expect(r.json.error.code).toBe("no_app");
+  });
+
   it("env set --app → POST /v1/projects/:id/env with webAppId", async () => {
     const r = await cli([
       "env",
@@ -595,6 +649,128 @@ describe("project-channel PM task intake", () => {
       scopePaths: ["src/checks", "test/e2e"],
     });
     expect(r.json.data).toMatchObject({ role: "qa" });
+  });
+
+  /**
+   * WHO RUNS A STEP is the manager's decision too.
+   *
+   * The row has carried `agent_override` / `agent_model_override` /
+   * `agent_effort_override` since the dispatcher learned to honour them above
+   * everything else, and until these flags existed the only thing that could
+   * set one was a person clicking a picker in the desktop app. The party that
+   * knows what each step actually IS — the manager writing the plan — could
+   * pick a teammate and not the engine that teammate runs on.
+   */
+  it("lets the manager choose the CLI, model and effort for one step", async () => {
+    const subtaskId = "44444444-4444-4444-8444-444444444445";
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      subtaskId,
+      "--agent",
+      "claude_code",
+      "--model",
+      "sonnet",
+      "--effort",
+      "low",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.find("PATCH", `/v1/project-tasks/${subtaskId}`)?.body).toEqual({
+      agentOverride: "claude_code",
+      agentModelOverride: "sonnet",
+      agentEffortOverride: "low",
+    });
+  });
+
+  it("hands a step back to its role with `default`", async () => {
+    // Without a word for "stop overriding", an override could be set from here
+    // and never taken off again.
+    const subtaskId = "44444444-4444-4444-8444-444444444446";
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      subtaskId,
+      "--agent",
+      "default",
+      "--effort",
+      "default",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.find("PATCH", `/v1/project-tasks/${subtaskId}`)?.body).toEqual({
+      agentOverride: null,
+      agentEffortOverride: null,
+    });
+  });
+
+  /**
+   * THE PRICE GATE.
+   *
+   * Choosing a step's engine is a choice a program now makes unattended, dozens
+   * of times a day, on the owner's account. The expensive tier is not something
+   * a delegation gets to reach for on its own — a person can still pick it in
+   * the app, where the choice is being made by whoever pays for it.
+   */
+  it("refuses the expensive model for a delegated step, however it is spelled", async () => {
+    for (const model of ["fable", "claude-fable-5", "anthropic/claude-fable-5"]) {
+      const r = await cli([
+        "task",
+        "subtask",
+        "update",
+        "44444444-4444-4444-8444-444444444448",
+        "--model",
+        model,
+        "--project",
+        "p_1",
+      ]);
+      expect(r.code).not.toBe(0);
+      // And it never reached the API — refusing after the write would be a
+      // rule that costs money to enforce.
+      expect(
+        stub.find("PATCH", "/v1/project-tasks/44444444-4444-4444-8444-444444444448"),
+      ).toBeUndefined();
+    }
+  });
+
+  it("still allows every other model", async () => {
+    const subtaskId = "44444444-4444-4444-8444-444444444449";
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      subtaskId,
+      "--model",
+      "sonnet",
+      "--project",
+      "p_1",
+    ]);
+    expect(r.code).toBe(0);
+    expect(stub.find("PATCH", `/v1/project-tasks/${subtaskId}`)?.body).toEqual({
+      agentModelOverride: "sonnet",
+    });
+  });
+
+  it("refuses a CLI this daemon cannot dispatch, at the keyboard", async () => {
+    // A typo here would otherwise surface at dispatch time as an agent that
+    // does not exist, minutes later and nowhere near the command that caused it.
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      "44444444-4444-4444-8444-444444444447",
+      "--agent",
+      "claude-code",
+      "--project",
+      "p_1",
+    ]);
+    expect(r.code).not.toBe(0);
   });
 
   it("creates an awaiting task with trusted origin and attaches its card", async () => {

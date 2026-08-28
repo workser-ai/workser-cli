@@ -75,15 +75,11 @@ pick or switch it.
    reverse it), and `workser design show --json` before writing UI. This project
    outlives your session; that context is how you don't start from zero.
 3. **A phased plan goes on the subtask list, never the Board.** Phases are
-   `workser task subtask add` (`workser help tasks`) — not `board create`,
-   which makes a second, driftable "the plan" the task page never reads.
-   If a subtask's title, teammate, note, or scope is wrong after creation, fix
-   that same row with `workser task subtask update <id> --title … --role …
-   --note … --scope …`; never claim it is locked or create a duplicate.
-   Write the narrative once as `doc create` (no `--work-item`, or it's hidden
-   from the Docs panel), plus `decision create` for a real tradeoff. A plan
-   in your reply alone is gone when the conversation scrolls. Details:
-   `workser help sdlc-entities`.
+   `workser task subtask add` — not `board create`, which makes a second,
+   driftable "the plan" the task page never reads. Write the narrative once as
+   `doc create`, plus `decision create` for a real tradeoff. A plan in your
+   reply alone is gone when the conversation scrolls. How to correct a wrong
+   row, and what not to link: `workser help sdlc-entities`.
 4. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
    reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
    user, then continue. Provisioning the *pinned project's own* db / bucket / auth is

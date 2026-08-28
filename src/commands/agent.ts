@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
+import { assertDelegatableModel } from "../model-policy.js";
 import { api } from "../client.js";
 import { ok, line, warn } from "../output.js";
 
@@ -123,6 +124,10 @@ export function registerAgent(program: Command): void {
       action(async ({ ctx, args, opts }) => {
         const spawnAgent = args[0] as string;
         const task = (args[1] as string[]).join(" ");
+        // One agent standing up another is the definition of an unattended
+        // choice — see `model-policy.ts`. The daemon refuses it too; this is
+        // the half that fails before a process is spawned.
+        assertDelegatableModel("--model", opts.model);
         const res = await api(ctx, "/v1/agents/run", {
           body: {
             agent: spawnAgent,

@@ -667,6 +667,48 @@ function route(
     return { body: { removed: true } };
   }
 
+  if (method === "GET" && /^\/v1\/apps\/[^/]+\/keys$/.test(path)) {
+    return {
+      body: [
+        {
+          environment: "production",
+          prefix: "wsgw_live_ab12cd",
+          created_at: "2026-08-01T00:00:00.000Z",
+          last_used_at: "2026-08-27T00:00:00.000Z",
+        },
+        {
+          environment: "preview",
+          prefix: "wsgw_test_ef34gh",
+          created_at: "2026-08-01T00:00:00.000Z",
+        },
+      ],
+    };
+  }
+  const rotateKey = path.match(/^\/v1\/apps\/[^/]+\/keys\/([^/]+)\/rotate$/);
+  if (method === "POST" && rotateKey) {
+    const keyName = decodeURIComponent(rotateKey[1]);
+    const environment = (req.body as any)?.environment;
+    if (keyName === "AI_GATEWAY_API_KEY") {
+      return {
+        body: {
+          key: `wsgw_${environment === "production" ? "live" : "test"}_newsecret123`,
+          prefix: "wsgw_live_newsec",
+          environment,
+        },
+      };
+    }
+    if (keyName === "BETTER_AUTH_SECRET") {
+      return { body: { rotated: true } };
+    }
+    return {
+      status: 400,
+      body: {
+        ok: false,
+        error: { code: "bad_request", message: `"${keyName}" has no rotation handler.` },
+      },
+    };
+  }
+
   if (method === "POST" && /^\/v1\/projects\/[^/]+\/deploy$/.test(path)) {
     return { body: { id: "d_new", status: "building", url: undefined } };
   }

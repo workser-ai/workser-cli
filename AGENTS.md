@@ -43,6 +43,8 @@ workser status | whoami                       # orient (read)
 workser project show | list                   # your pinned project + the workspace
 workser env set KEY=VALUE… | list | get KEY   # env vars
 workser env pull [--out .env.local]           # write cloud env vars into a local file
+workser key list [--app <id>]                 # this app's managed keys (redacted)
+workser key rotate <key> [--app <id>] [--env production|preview]  # AI_GATEWAY_API_KEY, BETTER_AUTH_SECRET
 workser db create                             # provision the Neon Postgres database
 workser db url | list                         # DB connection string + status
 workser db tables                             # list tables in the database
