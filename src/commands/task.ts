@@ -35,13 +35,27 @@ import type { Goal } from "./goal.js";
  * dependency on the app's source (same reasoning `board.ts` gives). If those
  * lists change, update both places.
  */
-const STATUSES = ["todo", "working", "checking", "ready", "accepted", "archived"] as const;
+const STATUSES = [
+  "todo",
+  "working",
+  "checking",
+  "ready",
+  "accepted",
+  "archived",
+] as const;
 
 /** The roles the dispatcher can actually run today. */
 const ROLES = ["pm", "architect", "web", "api", "automation", "qa"] as const;
 
 /** What a step produces, in the board's own vocabulary. */
-const KINDS = ["data_reports", "web", "mobile", "service", "automation", "docs"] as const;
+const KINDS = [
+  "data_reports",
+  "web",
+  "mobile",
+  "service",
+  "automation",
+  "docs",
+] as const;
 
 interface TaskTarget {
   kind: string;
@@ -84,13 +98,17 @@ export function registerTask(program: Command): void {
   task
     .command("list")
     .description("List the board's tasks — run this before starting anything")
-    .option("--status <value>", `only tasks in this status (${STATUSES.join(" | ")})`)
+    .option(
+      "--status <value>",
+      `only tasks in this status (${STATUSES.join(" | ")})`,
+    )
     .option("--label <value>", "only tasks carrying this label")
     .option("--limit <n>", "cap the number of tasks returned")
     .action(
       action(async ({ ctx, opts }) => {
         requireProject(ctx);
-        if (opts.status !== undefined) assertOneOf("--status", opts.status, STATUSES);
+        if (opts.status !== undefined)
+          assertOneOf("--status", opts.status, STATUSES);
         const rows =
           (await api<ProjectTask[]>(ctx, "/v1/project-tasks", {
             query: {
@@ -122,7 +140,10 @@ export function registerTask(program: Command): void {
         // thing this command's own description promises — is the task it
         // belongs to, with every sibling and what each of them produced.
         const id = args[0] || ctx.parentTaskId || resolveTaskId(ctx);
-        const row = await api<TaskDetail>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}`);
+        const row = await api<TaskDetail>(
+          ctx,
+          `/v1/project-tasks/${encodeURIComponent(id)}`,
+        );
         /**
          * THE PLAN THIS TASK SITS INSIDE, when it sits inside one.
          *
@@ -187,8 +208,14 @@ export function registerTask(program: Command): void {
             goalId: opts.goal,
             phase: opts.phase,
             targets: [
-              ...(opts.app ?? []).map((appId: string) => ({ kind: "app", appId })),
-              ...(opts.infra ?? []).map((ref: string) => ({ kind: "infra", ref })),
+              ...(opts.app ?? []).map((appId: string) => ({
+                kind: "app",
+                appId,
+              })),
+              ...(opts.infra ?? []).map((ref: string) => ({
+                kind: "infra",
+                ref,
+              })),
             ],
             ...(hasChannelOrigin
               ? {
@@ -243,8 +270,11 @@ export function registerTask(program: Command): void {
           ...(channelMessageError ? { channelMessageError } : {}),
         };
         ok(result, () => {
-          line(`${pc.green("opened")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`);
-          if (channelMessage) line(pc.dim("posted to the channel as Project Manager"));
+          line(
+            `${pc.green("opened")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`,
+          );
+          if (channelMessage)
+            line(pc.dim("posted to the channel as Project Manager"));
           if (channelMessageError) {
             warn(
               `Task opened, but its Project Manager card could not be posted: ${channelMessageError.message}`,
@@ -272,7 +302,10 @@ export function registerTask(program: Command): void {
     .description(
       'Add one subtask, e.g. `workser task subtask add "Build the upload screen" --role web`',
     )
-    .option("--task <id>", "the parent task (defaults to the task this run is inside)")
+    .option(
+      "--task <id>",
+      "the parent task (defaults to the task this run is inside)",
+    )
     .option("--role <value>", `who does it (${ROLES.join(" | ")})`)
     .option("--kind <value>", `what it produces (${KINDS.join(" | ")})`)
     .option("--note <text>", "one sentence on what this subtask does")
@@ -280,9 +313,15 @@ export function registerTask(program: Command): void {
       "--app <id...>",
       "the app this subtask is for — one id runs it inside that app's folder; leave it off and it runs at the project, seeing every app",
     )
-    .option("--infra <ref...>", "shared setup it touches (database | storage | auth | hosting | jobs)")
+    .option(
+      "--infra <ref...>",
+      "shared setup it touches (database | storage | auth | hosting | jobs)",
+    )
     .option("--scope <path...>", "files or folders THIS subtask owns")
-    .option("--depends-on <id...>", "subtasks that must finish first (key or id)")
+    .option(
+      "--depends-on <id...>",
+      "subtasks that must finish first (key or id)",
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         const parent = resolveTaskId(ctx, opts.task);
@@ -304,13 +343,21 @@ export function registerTask(program: Command): void {
             scopePaths: opts.scope,
             dependsOn,
             targets: [
-              ...(opts.app ?? []).map((appId: string) => ({ kind: "app", appId })),
-              ...(opts.infra ?? []).map((ref: string) => ({ kind: "infra", ref })),
+              ...(opts.app ?? []).map((appId: string) => ({
+                kind: "app",
+                appId,
+              })),
+              ...(opts.infra ?? []).map((ref: string) => ({
+                kind: "infra",
+                ref,
+              })),
             ],
           },
         });
         ok(row, () => {
-          line(`${pc.green("added")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`);
+          line(
+            `${pc.green("added")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`,
+          );
           if (row.role) line(pc.dim(`role: ${row.role}`));
         });
       }),
@@ -322,7 +369,10 @@ export function registerTask(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const id = resolveTaskId(ctx, args[0]);
-        const row = await api<TaskDetail>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}`);
+        const row = await api<TaskDetail>(
+          ctx,
+          `/v1/project-tasks/${encodeURIComponent(id)}`,
+        );
         const rows = row.subtasks ?? [];
         ok(rows, () => {
           if (!rows.length) {
@@ -378,7 +428,9 @@ export function registerTask(program: Command): void {
 
   task
     .command("move <id> <status>")
-    .description(`Move a task or step along the board (${STATUSES.join(" | ")})`)
+    .description(
+      `Move a task or step along the board (${STATUSES.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args }) => {
         assertOneOf("<status>", args[1], STATUSES);
@@ -387,7 +439,9 @@ export function registerTask(program: Command): void {
           `/v1/project-tasks/${encodeURIComponent(args[0])}/move`,
           { body: { status: args[1] } },
         );
-        ok(row, () => line(`${pc.green("moved")} ${pc.bold(row.title)} → ${args[1]}`));
+        ok(row, () =>
+          line(`${pc.green("moved")} ${pc.bold(row.title)} → ${args[1]}`),
+        );
       }),
     );
 
@@ -508,7 +562,9 @@ export function registerTask(program: Command): void {
    */
   task
     .command("can-start [id]")
-    .description("Ask whether work on this task may begin. Refuses until the owner approves.")
+    .description(
+      "Ask whether work on this task may begin. Refuses until the owner approves.",
+    )
     .action(
       action(async ({ ctx, args }) => {
         const id = resolveTaskId(ctx, args[0]);
@@ -541,11 +597,12 @@ export function registerTask(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const id = resolveTaskId(ctx, args[0]);
-        const row = await api<{ started?: number | null; note?: string | null }>(
-          ctx,
-          `/v1/project-tasks/${encodeURIComponent(id)}/start`,
-          { method: "POST" },
-        );
+        const row = await api<{
+          started?: number | null;
+          note?: string | null;
+        }>(ctx, `/v1/project-tasks/${encodeURIComponent(id)}/start`, {
+          method: "POST",
+        });
         ok(row, () => {
           const started = row?.started ?? null;
           if (started && started > 0) {
@@ -587,7 +644,9 @@ export function registerTask(program: Command): void {
           ok({ awaiting: row.approval_state === "awaiting", task: row }, () => {
             line(
               row.approval_state === "awaiting"
-                ? pc.yellow("The plan is waiting on the owner. They see it in the task.")
+                ? pc.yellow(
+                    "The plan is waiting on the owner. They see it in the task.",
+                  )
                 : `Already ${row.approval_state}.`,
             );
           });
@@ -610,7 +669,9 @@ export function registerTask(program: Command): void {
             },
           },
         );
-        ok(row, () => line(`${pc.green(row.approval_state)} ${pc.bold(row.title)}`));
+        ok(row, () =>
+          line(`${pc.green(row.approval_state)} ${pc.bold(row.title)}`),
+        );
       }),
     );
 
@@ -684,7 +745,11 @@ async function resolveDeps(
   });
 }
 
-function assertOneOf(flag: string, value: string, allowed: readonly string[]): void {
+function assertOneOf(
+  flag: string,
+  value: string,
+  allowed: readonly string[],
+): void {
   if (!allowed.includes(value)) {
     throw new WorkserError(
       `${flag} must be one of: ${allowed.join(", ")} — got "${value}".`,
@@ -695,7 +760,9 @@ function assertOneOf(flag: string, value: string, allowed: readonly string[]): v
 
 function formatRow(r: ProjectTask): string {
   const key = pc.dim((r.key ?? r.id.slice(0, 8)).padEnd(10));
-  const steps = r.subtaskTotal ? pc.dim(` ${r.subtaskDone}/${r.subtaskTotal}`) : "";
+  const steps = r.subtaskTotal
+    ? pc.dim(` ${r.subtaskDone}/${r.subtaskTotal}`)
+    : "";
   const gate =
     r.approval_state === "awaiting" ? pc.yellow(" awaiting approval") : "";
   return `${key} ${statusTag(r.status)} ${r.title}${steps}${gate}`;
@@ -704,7 +771,9 @@ function formatRow(r: ProjectTask): string {
 function formatSubtask(r: ProjectTask, index: number): string {
   const n = pc.dim(String(index).padStart(2, "0"));
   const role = r.role ? pc.dim(` [${r.role}]`) : "";
-  const scope = r.scope_paths?.length ? pc.dim(`  owns: ${r.scope_paths.join(", ")}`) : "";
+  const scope = r.scope_paths?.length
+    ? pc.dim(`  owns: ${r.scope_paths.join(", ")}`)
+    : "";
   const head = `${n} ${statusTag(r.status)} ${r.title}${role}${scope}`;
   /**
    * WHAT IT ACTUALLY DID — the half that was missing.
@@ -796,7 +865,11 @@ function printGoalContext(row: TaskDetail, goal: Goal): void {
       ),
     );
   } else if (!next) {
-    line(pc.dim("\nEvery part of this plan is done. Say so, and offer to wrap it up."));
+    line(
+      pc.dim(
+        "\nEvery part of this plan is done. Say so, and offer to wrap it up.",
+      ),
+    );
   }
   line(
     pc.dim(

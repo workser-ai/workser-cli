@@ -100,6 +100,15 @@ workser audio understand "<query>" [--url <u>|--file <p>] [-t <task>]  # transcr
 
 workser ask "<question>" [--type <t>] [--option <o>] # ask the user, WAIT for the answer
 
+# Tasks and subtasks (the plan shown in Orbit)
+workser task show [id]                              # inspect the task and its current plan
+workser task subtask list [taskId]                  # list the task's subtasks
+workser task subtask add "<title>" --role <role>    # add one proposed subtask
+workser task subtask update <id> --role <role>      # fix its teammate after creation
+workser task subtask update <id> --title "…" --note "…" --scope <paths...>
+workser task subtask remove <id>                    # remove it before work starts
+workser task start [id]                             # starts only an already-approved plan
+
 # owner-only (will return owner_only / exit 6 — ask the user to do these in Orbit):
 #   project create, project use, env rm, domain set
 ```
@@ -119,12 +128,12 @@ workser doc create "<title>" --markdown <text> | doc update <id> --markdown <tex
 already doing and what this project chose on purpose, so you don't re-file work or
 quietly reverse a decision.
 
-**A plan with phases goes on the Board before you build it.** The moment you split a
-task into more than one phase: one `board create` card per phase (only the one you're
-doing goes to `in-progress`), the plan itself as one `doc create --markdown` — with
-**no `--work-item`**, because a linked doc is shown on its card and hidden from the
-Docs panel — and a `decision create` if the plan settled a real tradeoff. A plan that
-lives only in your reply is gone as soon as the conversation scrolls.
+**A plan with phases goes on this task's Subtasks list, not the Board.** Use one
+`task subtask add` per phase. If you spot a bad title, role, note, or file scope after
+creation, correct that existing row with `task subtask update <id>`; do not say it is
+locked, create a replacement, or duplicate the plan. Write the plan narrative once
+as `doc create --markdown` with no `--work-item`, and record a real tradeoff with
+`decision create`.
 
 **Keep it true as you work.** `board move <id> in-progress` when you pick it up,
 `in-review` when it's ready to look at, `board close <id>` when it's done and

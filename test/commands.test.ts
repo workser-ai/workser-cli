@@ -573,6 +573,30 @@ describe("project list (read-only workspace browse)", () => {
 });
 
 describe("project-channel PM task intake", () => {
+  it("lets an agent correct a subtask's teammate and scope after creation", async () => {
+    const subtaskId = "44444444-4444-4444-8444-444444444444";
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      subtaskId,
+      "--role",
+      "qa",
+      "--scope",
+      "src/checks",
+      "test/e2e",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.find("PATCH", `/v1/project-tasks/${subtaskId}`)?.body).toEqual({
+      role: "qa",
+      scopePaths: ["src/checks", "test/e2e"],
+    });
+    expect(r.json.data).toMatchObject({ role: "qa" });
+  });
+
   it("creates an awaiting task with trusted origin and attaches its card", async () => {
     const channelId = "22222222-2222-4222-8222-222222222222";
     const messageId = "33333333-3333-4333-8333-333333333333";
@@ -613,10 +637,7 @@ describe("project-channel PM task intake", () => {
       createdByKind: "agent",
     });
     expect(
-      stub.find(
-        "POST",
-        `/v1/project-channels/${channelId}/messages`,
-      )?.body,
+      stub.find("POST", `/v1/project-channels/${channelId}/messages`)?.body,
     ).toEqual({
       content: "",
       agentRole: "pm",
@@ -681,7 +702,13 @@ describe("owner-only boundary (agent cannot administer the project set / destroy
     // that prompt fills with requests nobody should have to read, and the owner
     // learns to click through it.
     const before = stub.requests.length;
-    const r = await cli(["domain", "add", "app.workser.ai", "--project", "p_1"]);
+    const r = await cli([
+      "domain",
+      "add",
+      "app.workser.ai",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).not.toBe(0);
     expect(r.json.ok).toBe(false);
     expect(String(r.json.error.message)).toMatch(/belongs to Workser/i);
@@ -825,16 +852,39 @@ describe("SDLC surfaces", () => {
 
     // The daemon's list route takes no filter params, so --status narrows
     // client-side. Assert the narrowing, not just that the call happened.
-    const done = await cli(["board", "list", "--status", "done", "--project", "p_1"]);
+    const done = await cli([
+      "board",
+      "list",
+      "--status",
+      "done",
+      "--project",
+      "p_1",
+    ]);
     expect(done.json.data).toHaveLength(1);
     expect(done.json.data[0].id).toBe("wi_2");
 
-    const labelled = await cli(["board", "list", "--label", "bug", "--project", "p_1"]);
-    expect(labelled.json.data.map((r: { id: string }) => r.id)).toEqual(["wi_1"]);
+    const labelled = await cli([
+      "board",
+      "list",
+      "--label",
+      "bug",
+      "--project",
+      "p_1",
+    ]);
+    expect(labelled.json.data.map((r: { id: string }) => r.id)).toEqual([
+      "wi_1",
+    ]);
   });
 
   it("board move / close → PATCH the card's status", async () => {
-    const moved = await cli(["board", "move", "wi_1", "in-progress", "--project", "p_1"]);
+    const moved = await cli([
+      "board",
+      "move",
+      "wi_1",
+      "in-progress",
+      "--project",
+      "p_1",
+    ]);
     expect(moved.code).toBe(0);
     expect(stub.lastRequest!.method).toBe("PATCH");
     expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/work-items/wi_1");
@@ -847,7 +897,14 @@ describe("SDLC surfaces", () => {
   });
 
   it("board rejects an unknown status before calling the daemon", async () => {
-    const r = await cli(["board", "move", "wi_1", "shipped", "--project", "p_1"]);
+    const r = await cli([
+      "board",
+      "move",
+      "wi_1",
+      "shipped",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).not.toBe(0);
     expect(r.json.ok).toBe(false);
     expect(r.json.error.message).toContain("backlog");
@@ -857,10 +914,21 @@ describe("SDLC surfaces", () => {
 
   it("board update sends only the fields it was given", async () => {
     const r = await cli([
-      "board", "update", "wi_1", "--priority", "urgent", "--label", "auth", "--project", "p_1",
+      "board",
+      "update",
+      "wi_1",
+      "--priority",
+      "urgent",
+      "--label",
+      "auth",
+      "--project",
+      "p_1",
     ]);
     expect(r.code).toBe(0);
-    expect(stub.lastRequest!.body).toEqual({ priority: "urgent", labels: ["auth"] });
+    expect(stub.lastRequest!.body).toEqual({
+      priority: "urgent",
+      labels: ["auth"],
+    });
   });
 
   it("board update with no fields fails instead of sending an empty PATCH", async () => {
@@ -873,7 +941,9 @@ describe("SDLC surfaces", () => {
   it("decision list / show → the read side of project memory", async () => {
     const list = await cli(["decision", "list", "--project", "p_1"]);
     expect(list.code).toBe(0);
-    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/architecture-decisions");
+    expect(stub.lastRequest!.path).toBe(
+      "/v1/projects/p_1/architecture-decisions",
+    );
     expect(list.json.data[0].title).toBe("Use Postgres");
 
     const show = await cli(["decision", "show", "dec_1", "--project", "p_1"]);
@@ -882,7 +952,15 @@ describe("SDLC surfaces", () => {
   });
 
   it("requirement update → PATCH, the one memory entity that legitimately moves", async () => {
-    const r = await cli(["requirement", "update", "req_1", "--status", "done", "--project", "p_1"]);
+    const r = await cli([
+      "requirement",
+      "update",
+      "req_1",
+      "--status",
+      "done",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     expect(stub.lastRequest!.method).toBe("PATCH");
     expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/requirements/req_1");
@@ -894,12 +972,25 @@ describe("SDLC surfaces", () => {
     expect(list.code).toBe(0);
     expect(list.json.data[0].filePath).toBe(".workser/docs/doc_1.md");
 
-    const linked = await cli(["doc", "list", "--work-item", "wi_1", "--project", "p_1"]);
+    const linked = await cli([
+      "doc",
+      "list",
+      "--work-item",
+      "wi_1",
+      "--project",
+      "p_1",
+    ]);
     expect(stub.lastRequest!.query.workItemId).toBe("wi_1");
     expect(linked.json.data).toHaveLength(1);
 
     const updated = await cli([
-      "doc", "update", "doc_1", "--markdown", "# New body", "--project", "p_1",
+      "doc",
+      "update",
+      "doc_1",
+      "--markdown",
+      "# New body",
+      "--project",
+      "p_1",
     ]);
     expect(updated.code).toBe(0);
     expect(stub.lastRequest!.method).toBe("PATCH");
@@ -907,7 +998,14 @@ describe("SDLC surfaces", () => {
   });
 
   it("doc show --markdown reports the mirror path to read", async () => {
-    const r = await cli(["doc", "show", "doc_1", "--markdown", "--project", "p_1"]);
+    const r = await cli([
+      "doc",
+      "show",
+      "doc_1",
+      "--markdown",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).toBe(0);
     expect(r.json.data.filePath).toBe(".workser/docs/doc_1.md");
   });
@@ -929,7 +1027,9 @@ describe("SDLC surfaces", () => {
   it("design show reports no brand rather than failing", async () => {
     // Most projects have no brand; the agent's instruction for that case is
     // "choose sensible styling", which depends on this being a success.
-    stub.overrides.set("GET /v1/projects/p_1/design/files", { body: { files: [] } });
+    stub.overrides.set("GET /v1/projects/p_1/design/files", {
+      body: { files: [] },
+    });
     const r = await cli(["design", "show", "--project", "p_1"]);
     expect(r.code).toBe(0);
     expect(r.json.data.hasBrand).toBe(false);
@@ -1136,7 +1236,14 @@ describe("environments — one flag, four commands", () => {
   it("deploy refuses to guess when --prod and --env disagree", async () => {
     // Someone believes one of the two things they typed. Picking one means
     // half the time we ship to the environment they were avoiding.
-    const r = await cli(["deploy", "--project", "p_1", "--prod", "--env", "preview"]);
+    const r = await cli([
+      "deploy",
+      "--project",
+      "p_1",
+      "--prod",
+      "--env",
+      "preview",
+    ]);
     expect(r.code).not.toBe(0);
     expect(r.json.error.message).toMatch(/ask for different things/);
   });
@@ -1144,12 +1251,24 @@ describe("environments — one flag, four commands", () => {
   it("deploy refuses development, and says why", async () => {
     const r = await cli(["deploy", "--project", "p_1", "--env", "dev"]);
     expect(r.code).not.toBe(0);
-    expect(r.json.error.message).toMatch(/Nothing is ever deployed to development/);
+    expect(r.json.error.message).toMatch(
+      /Nothing is ever deployed to development/,
+    );
   });
 
   it("env set --env production scopes the write to that target only", async () => {
-    await cli(["env", "set", "API_KEY=x", "--project", "p_1", "--env", "production"]);
-    expect((stub.lastRequest!.body as any).vars[0].target).toEqual(["production"]);
+    await cli([
+      "env",
+      "set",
+      "API_KEY=x",
+      "--project",
+      "p_1",
+      "--env",
+      "production",
+    ]);
+    expect((stub.lastRequest!.body as any).vars[0].target).toEqual([
+      "production",
+    ]);
   });
 
   it("env set with no --env still writes everywhere, as it always has", async () => {
@@ -1191,7 +1310,14 @@ describe("urls and deployments", () => {
   });
 
   it("deployments list filters by environment", async () => {
-    await cli(["deployments", "list", "--project", "p_1", "--env", "production"]);
+    await cli([
+      "deployments",
+      "list",
+      "--project",
+      "p_1",
+      "--env",
+      "production",
+    ]);
     expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/deployments");
     expect(stub.lastRequest!.query.environment).toBe("production");
   });
@@ -1206,7 +1332,13 @@ describe("urls and deployments", () => {
   });
 
   it("rollback refuses a commit sha rather than guessing a version", async () => {
-    const r = await cli(["deployments", "rollback", "abc123", "--project", "p_1"]);
+    const r = await cli([
+      "deployments",
+      "rollback",
+      "abc123",
+      "--project",
+      "p_1",
+    ]);
     expect(r.code).not.toBe(0);
     expect(r.json.error.message).toMatch(/not a version number/);
   });
@@ -1223,11 +1355,18 @@ describe("neon — the database, as an operator", () => {
 
   it("branch create copies the branch in use unless told otherwise", async () => {
     await cli(["neon", "branch", "create", "qa-run", "--project", "p_1"]);
-    expect((stub.lastRequest!.body as any)).toEqual({ name: "qa-run" });
+    expect(stub.lastRequest!.body as any).toEqual({ name: "qa-run" });
 
     await cli([
-      "neon", "branch", "create", "qa-run", "--project", "p_1",
-      "--from", "br_x", "--no-compute",
+      "neon",
+      "branch",
+      "create",
+      "qa-run",
+      "--project",
+      "p_1",
+      "--from",
+      "br_x",
+      "--no-compute",
     ]);
     expect(stub.lastRequest!.body).toEqual({
       name: "qa-run",
@@ -1239,7 +1378,9 @@ describe("neon — the database, as an operator", () => {
   it("branch reset and rm are their own calls, not one with a flag", async () => {
     await cli(["neon", "branch", "reset", "br_qa", "--project", "p_1"]);
     expect(stub.lastRequest!.method).toBe("POST");
-    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/neon-branches/br_qa/reset");
+    expect(stub.lastRequest!.path).toBe(
+      "/v1/projects/p_1/neon-branches/br_qa/reset",
+    );
 
     await cli(["neon", "branch", "rm", "br_qa", "--project", "p_1"]);
     expect(stub.lastRequest!.method).toBe("DELETE");
@@ -1247,7 +1388,15 @@ describe("neon — the database, as an operator", () => {
   });
 
   it("database list scopes to a branch when asked", async () => {
-    await cli(["neon", "database", "list", "--project", "p_1", "--branch", "br_qa"]);
+    await cli([
+      "neon",
+      "database",
+      "list",
+      "--project",
+      "p_1",
+      "--branch",
+      "br_qa",
+    ]);
     expect(stub.lastRequest!.query.branchId).toBe("br_qa");
   });
 
@@ -1261,7 +1410,14 @@ describe("neon — the database, as an operator", () => {
 
 describe("env values that differ per environment", () => {
   it("env list --env asks for that environment's values", async () => {
-    const r = await cli(["env", "list", "--project", "p_1", "--env", "production"]);
+    const r = await cli([
+      "env",
+      "list",
+      "--project",
+      "p_1",
+      "--env",
+      "production",
+    ]);
     expect(stub.lastRequest!.query.environment).toBe("production");
     expect(r.json.data).toHaveLength(1);
   });
@@ -1288,7 +1444,14 @@ describe("env values that differ per environment", () => {
 
   it("--env and --app travel together rather than one replacing the other", async () => {
     await cli([
-      "env", "list", "--project", "p_1", "--app", "a_1", "--env", "preview",
+      "env",
+      "list",
+      "--project",
+      "p_1",
+      "--app",
+      "a_1",
+      "--env",
+      "preview",
     ]);
     expect(stub.lastRequest!.query.webAppId).toBe("a_1");
     expect(stub.lastRequest!.query.environment).toBe("preview");
@@ -1308,7 +1471,9 @@ describe("usage", () => {
     // The whole point. "0 GB of 10" would tell someone they have room when
     // nobody looked.
     const r = await cli(["usage", "--project", "p_1"]);
-    const files = r.json.data.dimensions.find((d: any) => d.id === "file_storage_gb");
+    const files = r.json.data.dimensions.find(
+      (d: any) => d.id === "file_storage_gb",
+    );
     expect(files.used).toBeNull();
     expect(files.note).toMatch(/could not be read/);
   });

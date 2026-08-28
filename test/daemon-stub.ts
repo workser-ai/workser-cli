@@ -193,8 +193,16 @@ function route(
     return {
       body: {
         points: [
-          { ref: "c0ffee1234567890", at: "2026-08-11T02:00:00.000Z", label: "before the refactor" },
-          { ref: "dec0de0987654321", at: "2026-08-10T09:30:00.000Z", label: "a manual checkpoint" },
+          {
+            ref: "c0ffee1234567890",
+            at: "2026-08-11T02:00:00.000Z",
+            label: "before the refactor",
+          },
+          {
+            ref: "dec0de0987654321",
+            at: "2026-08-10T09:30:00.000Z",
+            label: "a manual checkpoint",
+          },
         ],
       },
     };
@@ -262,12 +270,22 @@ function route(
     return {
       body: [
         { id: "br_live", name: "main", parent_id: null, isProjectBranch: true },
-        { id: "br_qa", name: "qa-run", parent_id: "br_live", isProjectBranch: false },
+        {
+          id: "br_qa",
+          name: "qa-run",
+          parent_id: "br_live",
+          isProjectBranch: false,
+        },
       ],
     };
   }
-  if (method === "POST" && /^\/v1\/projects\/[^/]+\/neon-branches$/.test(path)) {
-    return { body: { branch: { id: "br_new", name: (req.body as any)?.name } } };
+  if (
+    method === "POST" &&
+    /^\/v1\/projects\/[^/]+\/neon-branches$/.test(path)
+  ) {
+    return {
+      body: { branch: { id: "br_new", name: (req.body as any)?.name } },
+    };
   }
   if (
     method === "POST" &&
@@ -281,7 +299,10 @@ function route(
   ) {
     return { body: { ok: true } };
   }
-  if (method === "GET" && /^\/v1\/projects\/[^/]+\/neon-databases$/.test(path)) {
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/neon-databases$/.test(path)
+  ) {
     return {
       body: [
         { name: "app", owner_name: "app_owner", isProjectDatabase: true },
@@ -289,7 +310,10 @@ function route(
       ],
     };
   }
-  if (method === "GET" && /^\/v1\/projects\/[^/]+\/neon-endpoints$/.test(path)) {
+  if (
+    method === "GET" &&
+    /^\/v1\/projects\/[^/]+\/neon-endpoints$/.test(path)
+  ) {
     return {
       body: [
         {
@@ -311,7 +335,14 @@ function route(
         tier: "starter",
         complete: false,
         dimensions: [
-          { id: "db_storage_gb", label: "Database", used: 2.5, unit: "GB", limit: 10, kind: "soft" },
+          {
+            id: "db_storage_gb",
+            label: "Database",
+            used: 2.5,
+            unit: "GB",
+            limit: 10,
+            kind: "soft",
+          },
           {
             id: "file_storage_gb",
             label: "Files",
@@ -321,7 +352,14 @@ function route(
             kind: "soft",
             note: "The file store could not be read just now.",
           },
-          { id: "projects", label: "Projects", used: 2, unit: "count", limit: 2, kind: "hard" },
+          {
+            id: "projects",
+            label: "Projects",
+            used: 2,
+            unit: "count",
+            limit: 2,
+            kind: "hard",
+          },
         ],
       },
     };
@@ -388,7 +426,12 @@ function route(
           previewDeploymentUrl: "https://abc123.vercel.app",
           productionDeploymentUrl: "https://def456.vercel.app",
         },
-        { id: "a_2", name: "Ordering bot", type: "ai-agent", status: "not_deployed" },
+        {
+          id: "a_2",
+          name: "Ordering bot",
+          type: "ai-agent",
+          status: "not_deployed",
+        },
       ],
     };
   }
@@ -599,7 +642,9 @@ function route(
     // row per key with the value that applies THERE; without, the shared value
     // plus where it differs.
     if (req.query.environment === "production") {
-      return { body: [{ key: "API_KEY", masked: "pr•", environment: "production" }] };
+      return {
+        body: [{ key: "API_KEY", masked: "pr•", environment: "production" }],
+      };
     }
     return {
       body: [
@@ -755,6 +800,20 @@ function route(
       },
     };
   }
+  const projectTask = /^\/v1\/project-tasks\/([^/]+)$/.exec(path);
+  if (method === "PATCH" && projectTask) {
+    const sent = (req.body ?? {}) as Record<string, unknown>;
+    return {
+      body: {
+        id: projectTask[1],
+        parent_task_id: "11111111-1111-4111-8111-111111111111",
+        title: "Updated subtask",
+        status: "todo",
+        approval_state: "approved",
+        ...sent,
+      },
+    };
+  }
   if (
     method === "POST" &&
     /^\/v1\/project-channels\/[^/]+\/messages$/.test(path)
@@ -774,9 +833,10 @@ function route(
   //
   // The daemon scopes all of these to the pinned project, so the stub keys off
   // the resource segment rather than the project id.
-  const sdlc = /^\/v1\/projects\/[^/]+\/(work-items|documents|architecture-decisions|requirements)(?:\/([^/]+))?$/.exec(
-    path,
-  );
+  const sdlc =
+    /^\/v1\/projects\/[^/]+\/(work-items|documents|architecture-decisions|requirements)(?:\/([^/]+))?$/.exec(
+      path,
+    );
   if (sdlc) {
     const [, resource, id] = sdlc;
     if (method === "GET" && !id) {
@@ -784,7 +844,13 @@ function route(
         return {
           body: [
             { ...WORK_ITEM, id: "wi_1", status: "backlog", labels: ["bug"] },
-            { ...WORK_ITEM, id: "wi_2", title: "Ship the board", status: "done", labels: [] },
+            {
+              ...WORK_ITEM,
+              id: "wi_2",
+              title: "Ship the board",
+              status: "done",
+              labels: [],
+            },
           ],
         };
       }
@@ -792,16 +858,23 @@ function route(
         // `?workItemId=` narrows to the single linked document, matching
         // `routes/documents.ts` (which returns a 0- or 1-element array).
         return req.query.workItemId
-          ? { body: [{ ...DOCUMENT, id: "doc_2", workItemId: req.query.workItemId }] }
+          ? {
+              body: [
+                { ...DOCUMENT, id: "doc_2", workItemId: req.query.workItemId },
+              ],
+            }
           : { body: [DOCUMENT] };
       }
       if (resource === "architecture-decisions") return { body: [DECISION] };
-      return { body: [REQUIREMENT, { ...REQUIREMENT, id: "req_2", status: "done" }] };
+      return {
+        body: [REQUIREMENT, { ...REQUIREMENT, id: "req_2", status: "done" }],
+      };
     }
     if (method === "GET" && id) {
       if (resource === "work-items") return { body: { ...WORK_ITEM, id } };
       if (resource === "documents") return { body: { ...DOCUMENT, id } };
-      if (resource === "architecture-decisions") return { body: { ...DECISION, id } };
+      if (resource === "architecture-decisions")
+        return { body: { ...DECISION, id } };
       return { body: { ...REQUIREMENT, id } };
     }
     if (method === "POST" && !id) {
@@ -833,7 +906,10 @@ function route(
               brand: { name: "Green Grocer" },
             }),
           },
-          { path: "design/tokens.css", contents: ":root{--ws-color-primary:#1f7a4d}" },
+          {
+            path: "design/tokens.css",
+            contents: ":root{--ws-color-primary:#1f7a4d}",
+          },
         ],
       },
     };
