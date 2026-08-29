@@ -6,6 +6,7 @@ import { requireProject, type Context } from "../context.js";
 import { ok, line, warn } from "../output.js";
 import { WorkserError } from "../errors.js";
 import { assertDelegatableModel } from "../model-policy.js";
+import { parseRefs } from "../subtask-attachments.js";
 import type { Goal } from "./goal.js";
 
 /**
@@ -390,6 +391,10 @@ export function registerTask(program: Command): void {
     )
     .option("--scope <path...>", "files or folders THIS subtask owns")
     .option(
+      "--ref <spec...>",
+      'what this step should READ first — a path or URL, optionally "::why it matters" (repeatable)',
+    )
+    .option(
       "--depends-on <id...>",
       "subtasks that must finish first (key or id)",
     )
@@ -424,6 +429,10 @@ export function registerTask(program: Command): void {
             role: opts.role,
             category: opts.kind,
             scopePaths: opts.scope,
+            // What to read before doing it. Parsed here rather than pushed at
+            // the API so a malformed pointer is dropped where the agent can
+            // still be told, not stored and drawn as an empty chip.
+            attachments: parseRefs(opts.ref),
             dependsOn,
             targets: [
               ...(opts.app ?? []).map((appId: string) => ({
@@ -510,6 +519,10 @@ export function registerTask(program: Command): void {
     .option("--kind <value>", KINDS.join(" | "))
     .option("--scope <path...>", "replaces the subtask's scope entirely")
     .option(
+      "--ref <spec...>",
+      "replaces what this step should READ first — same form as `subtask add --ref`",
+    )
+    .option(
       "--agent <id>",
       `run this step on a specific CLI (${AGENTS.join(" | ")}); "default" hands it back to the role's own`,
     )
@@ -546,6 +559,10 @@ export function registerTask(program: Command): void {
               role: opts.role,
               category: opts.kind,
               scopePaths: opts.scope,
+              // Only sent when `--ref` was actually given: the PATCH replaces
+              // the whole list, so passing `[]` for an untouched flag would
+              // clear a brief the manager set on a previous call.
+              attachments: opts.ref ? parseRefs(opts.ref) : undefined,
               agentOverride: clearable(opts.agent),
               agentModelOverride: clearable(opts.model),
               agentEffortOverride: clearable(opts.effort),
