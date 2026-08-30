@@ -38,6 +38,13 @@ import type { Goal } from "./goal.js";
  * lists change, update both places.
  */
 const STATUSES = [
+  /**
+   * LISTED, NOT PLANNED. A goal's later phases get their tasks written down
+   * when the plan is agreed, so the owner can read the whole shape — but those
+   * rows have no subtasks and the runner must never pick them up. `todo` keeps
+   * its meaning: the team may start this now.
+   */
+  "backlog",
   "todo",
   "working",
   "checking",
@@ -45,6 +52,18 @@ const STATUSES = [
   "accepted",
   "archived",
 ] as const;
+
+/** urgent | high | normal | low — mirrored from `orbit_work_items`. */
+const PRIORITIES = ["urgent", "high", "normal", "low"] as const;
+
+/**
+ * How much a task is asking for. ONE rule reads it: whether a channel in Smart
+ * mode may start the task without the owner pressing anything.
+ *
+ * `standard` is the default on the column, so omitting the flag always ASKS.
+ * There is deliberately no way to make "small" the fallback.
+ */
+const SIZES = ["small", "standard"] as const;
 
 /**
  * The roles the dispatcher can actually run.
@@ -261,10 +280,27 @@ export function registerTask(program: Command): void {
       "--phase <name>",
       "which slice of that goal — must match one of its phase names",
     )
+    .option("--priority <value>", `how urgent (${PRIORITIES.join(" | ")})`)
+    .option(
+      "--size <value>",
+      `small lets the channel start it without asking; standard asks (${SIZES.join(" | ")})`,
+    )
+    .option(
+      "--status <value>",
+      `start it somewhere other than 'todo' — use 'backlog' for a later phase's work (${STATUSES.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         requireProject(ctx);
         if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
+        if (opts.priority !== undefined)
+          assertOneOf("--priority", opts.priority, PRIORITIES);
+        // Validated rather than passed through: this is the one flag that
+        // decides whether a person is consulted, so a typo must fail loudly
+        // instead of falling through to whichever side the server defaults to.
+        if (opts.size !== undefined) assertOneOf("--size", opts.size, SIZES);
+        if (opts.status !== undefined)
+          assertOneOf("--status", opts.status, STATUSES);
 
         const hasChannelOrigin = Boolean(
           ctx.projectChannelId && ctx.projectChannelMessageId,
@@ -279,6 +315,11 @@ export function registerTask(program: Command): void {
             // a goal has to be argued for, never assumed.
             goalId: opts.goal,
             phase: opts.phase,
+            priority: opts.priority,
+            size: opts.size,
+            // `backlog` for a later phase's work: written down so the owner can
+            // read the whole plan, with nothing for the runner to pick up.
+            status: opts.status,
             targets: [
               ...(opts.app ?? []).map((appId: string) => ({
                 kind: "app",

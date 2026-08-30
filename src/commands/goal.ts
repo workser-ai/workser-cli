@@ -257,6 +257,73 @@ export function registerGoal(program: Command): void {
       }),
     );
 
+  /**
+   * ADOPTING WORK THAT ALREADY EXISTS.
+   *
+   * THE CASE THIS IS FOR, and it is the common one rather than the edge: a
+   * project that was handed work one request at a time, for weeks, and only
+   * now has somebody writing down what all of it was actually part of. Without
+   * this the plan can be proposed and the finished work cannot be put under
+   * it — so the owner agrees a plan that immediately reads as though nothing
+   * has ever been built, which is worse than having had no plan.
+   *
+   * PLURAL BECAUSE THE REAL CALL IS PLURAL. Adopting five tasks one command at
+   * a time is five round trips and five chances to stop halfway.
+   *
+   * THE PHASE IS CHECKED AGAINST THE GOAL, here, before anything is written.
+   * `phase` is a join key held as a bare string on the task, so a typo does
+   * not fail — it files the work under a slice that does not exist, and the
+   * plan renders a part with nothing in it. That failure is invisible and
+   * looks exactly like work that has not started.
+   */
+  goal
+    .command("adopt <id>")
+    .description(
+      "File tasks that already exist under a part of this plan — for work done before the plan was written",
+    )
+    .option("--task <id...>", "the tasks to file under it")
+    .option("--phase <name>", "which part of the plan they belong to")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        requireProject(ctx);
+        const goalId = String(args[0]);
+        const taskIds: string[] = opts.task ?? [];
+        if (!taskIds.length) {
+          throw new WorkserError(
+            "Name the tasks to file, e.g. `--task WORK-12 WORK-13`.",
+          );
+        }
+        const goal = await api<Goal>(
+          ctx,
+          `/v1/project-goals/${encodeURIComponent(goalId)}`,
+        );
+        if (!goal) throw new WorkserError(`No goal ${goalId}.`);
+        const names = (goal.phases ?? []).map((p) =>
+          typeof p === "string" ? p : p.name,
+        );
+        const phase = String(opts.phase ?? "").trim();
+        if (!phase || !names.includes(phase)) {
+          throw new WorkserError(
+            `--phase must be one of this goal's parts: ${names.join(", ")}.`,
+          );
+        }
+
+        const filed: string[] = [];
+        for (const taskId of taskIds) {
+          await api(ctx, `/v1/project-tasks/${encodeURIComponent(taskId)}`, {
+            method: "PATCH",
+            body: { goalId, phase },
+          });
+          filed.push(taskId);
+        }
+        ok({ goalId, phase, filed }, () => {
+          success(
+            `Filed ${filed.length} ${filed.length === 1 ? "task" : "tasks"} under ${pc.bold(phase)}`,
+          );
+        });
+      }),
+    );
+
   goal
     .command("update <id>")
     .description("Change the shape, or move the goal along")
