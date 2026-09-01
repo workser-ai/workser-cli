@@ -1,6 +1,6 @@
 {
   "name": "@workser/cli",
-  "version": "0.6.12",
+  "version": "0.6.13",
   "description": "Workser CLI — give your local AI agent native DevOps & infrastructure on Workser. The agent runs `workser …` to provision, deploy, and manage real apps.",
   "license": "MIT",
   "type": "module",
