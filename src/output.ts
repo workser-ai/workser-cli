@@ -2,6 +2,9 @@ import pc from "picocolors";
 import { WorkserError } from "./errors.js";
 import { OWNER_ONLY_EXIT } from "./capabilities.js";
 
+/** Exit code for a request that named a project outside this folder's scope. */
+export const OUT_OF_SCOPE_EXIT = 7;
+
 /**
  * Output is designed to be read by BOTH humans and AI agents.
  * - `--json` → a single stable line: {"ok":true,"data":...} / {"ok":false,"error":...}
@@ -75,7 +78,16 @@ export function fail(err: unknown): never {
     } else if (e.status === 401 || e.code === "unauthorized") {
       process.stderr.write(pc.dim("  Run `workser login` to authenticate.\n"));
     } else if (e.code === "no_project") {
-      process.stderr.write(pc.dim("  Run `workser project use <id>` or pass --project <id>.\n"));
+      // Deliberately does NOT suggest `project use` or `--project`: the first
+      // is owner-only and the second may not leave the folder you are in.
+      // `cd` is the answer, and naming the wrong one wastes a whole turn.
+      process.stderr.write(pc.dim("  cd into the project's folder, or open it in Workser.\n"));
+    } else if (e.code === "out_of_scope") {
+      process.stderr.write(
+        pc.dim(
+          "  You can move between your organization's projects; another organization's are not reachable.\n",
+        ),
+      );
     } else if (e.code === "awaiting_approval") {
       process.stderr.write(pc.dim("  Approve the action in Workser Orbit, then retry.\n"));
     } else if (e.code === "owner_only") {
@@ -90,5 +102,8 @@ function exitCodeFor(e: WorkserError): number {
   if (e.status === 401 || e.code === "unauthorized") return 3;
   if (e.code === "awaiting_approval") return 5;
   if (e.code === "owner_only") return OWNER_ONLY_EXIT;
+  // Its own code so a script can tell "you asked for another organization"
+  // apart from "the command failed" — the first is never fixed by retrying.
+  if (e.code === "out_of_scope") return OUT_OF_SCOPE_EXIT;
   return 1;
 }

@@ -33,6 +33,32 @@ export function registerStatus(program: Command): void {
               (data.project?.id ? pc.dim(`  (${data.project.id})`) : ""),
           );
           if (ctx.projectRoot) line(`  folder:    ${pc.dim(ctx.projectRoot)}`);
+          /**
+           * WHERE this shell may work, and what established it.
+           *
+           * `status` is what someone runs after work landed in the wrong place,
+           * and the answer is almost always here: "folder" means this directory
+           * decided, "workser" means the app's current selection did — so
+           * opening a different project moves it, and a shell in an unmarked
+           * folder follows along.
+           *
+           * The ORG is the line that matters, so it is what gets printed. Its
+           * projects are all reachable; another organization's are not.
+           */
+          if (data.scope) {
+            const why =
+              data.scope.source === "folder"
+                ? "this folder"
+                : data.scope.source === "active"
+                  ? "the project open in Workser"
+                  : null;
+            line(
+              data.scope.orgId
+                ? `  org:       ${data.scope.orgId}` +
+                    (why ? pc.dim(`  (from ${why})`) : "")
+                : `  org:       ${pc.yellow("unscoped — every project is reachable")}`,
+            );
+          }
           // Named only when we are inside one. Printing "app: —" from the
           // project folder would read as a fault; it is the normal place to
           // stand for anything that spans more than one app.

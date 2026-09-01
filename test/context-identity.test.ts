@@ -83,7 +83,10 @@ describe("the folder decides, not the environment", () => {
   });
 
   it("an explicit --project still wins over both", () => {
-    // A person said it out loud; nothing derived may override that.
+    // A person — or an agent moving between its ORGANIZATION's projects, which
+    // is ordinary work — said it out loud; nothing derived may override that.
+    // The organization boundary is enforced by the daemon, which is the only
+    // side that can resolve a project to its org. See `project-scope.ts`.
     const { app } = tree("org-b", "proj-b", "app-b");
     process.env.WORKSER_PROJECT_ID = "proj-a";
     const ctx = buildContext({ cwd: app, project: "proj-c" });
@@ -91,5 +94,18 @@ describe("the folder decides, not the environment", () => {
     // The app is dropped on purpose: it belongs to proj-b, not proj-c, and
     // carrying it across would let the daemon act on it in the wrong project.
     expect(ctx.appId).toBeUndefined();
+  });
+});
+
+/** The cwd is what the daemon scopes on, so it has to reach it intact. */
+describe("the cwd is resolved absolutely", () => {
+  it("keeps a non-ASCII path intact", () => {
+    // Thai folder names are ordinary here, and the header carrying this is
+    // latin-1 on the wire — see the percent-encoding in client.ts.
+    const dir = join(root, "โครงการ");
+    mkdirSync(dir, { recursive: true });
+    const ctx = buildContext({ cwd: dir });
+    expect(ctx.cwd).toBe(dir);
+    expect(decodeURIComponent(encodeURIComponent(ctx.cwd))).toBe(dir);
   });
 });

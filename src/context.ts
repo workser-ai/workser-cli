@@ -195,6 +195,29 @@ export function buildContext(opts: GlobalOpts): Context {
     process.env.WORKSER_PROJECT_ID ||
     session.defaultProjectId;
 
+  /**
+   * `--project` MOVES YOU WITHIN YOUR ORGANIZATION, AND NO FURTHER.
+   *
+   * ─── WHY THE FLAG IS ALLOWED TO OVERRULE THE FOLDER ─────────────────────
+   *
+   * It is briefly worth saying what this is NOT. `--project` used to be
+   * unbounded: an agent could read another organization's project id out of
+   * `workser project list` — which returned the whole account — pass it here,
+   * and every command that writes would land in a different customer's work.
+   *
+   * The fix is not to pin the flag to the folder. An agent's job routinely
+   * spans an organization's projects: a fix in the API lands beside one in the
+   * web app, a plan touches three repositories, and an agent that has to ask
+   * permission to move is an agent that stops. So the boundary is the
+   * ORGANIZATION, and it is enforced by the daemon, which is the only side that
+   * can resolve a project to its org.
+   *
+   * Nothing is checked here. A client-side rule is a suggestion, and a
+   * suggestion that needs a network call to evaluate is worse than none —
+   * `error.code = "out_of_scope"` (exit 7) comes back from the daemon with the
+   * organization named in it.
+   */
+
   // Only trust the folder's app when the folder's PROJECT is the one we settled
   // on. Otherwise `--project other-id` run from inside an app would carry that
   // app's id into a project it does not belong to, and the daemon would happily

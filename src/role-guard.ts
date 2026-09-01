@@ -55,6 +55,14 @@ const READS = [
   // project. What stops a reviewer editing code is its filesystem mode, and
   // that is untouched.
   "artifact",
+  // LEAVING A FACT FOR THE TEAM IS NOT CHANGING THE PROJECT — the same
+  // argument as `artifact` directly above, and it belongs in READS rather than
+  // BUILDS on purpose. The roles that DISCOVER things are the reading ones: a
+  // tester that found the real cause, an analyst that found the actual column
+  // name, a security engineer that found where a key is read from. A shared
+  // memory only builders could write to would be missing most of what is worth
+  // sharing. See the daemon's `team-memory.ts`.
+  "note",
 ];
 
 const BUILDS = [
@@ -63,7 +71,7 @@ const BUILDS = [
 ];
 
 const ROLE_VERBS: Record<string, string[]> = {
-  pm: [...READS, "ask", "app"],
+  pm: [...READS, "ask", "app"],  // `note` reaches this via READS.
   architect: [...BUILDS, "versions"],
   web: BUILDS,
   api: BUILDS,

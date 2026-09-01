@@ -30,7 +30,7 @@ load.
 | Build an automation, or use Gmail/Slack/Stripe/Sheets | `workflow …`, `app …` | `workser help automation` |
 | Generate an image | `image …` | `workser help images` |
 | Hand a subtask to another agent | `agent …` | `workser help roles` |
-| Remember or recall something across conversations | `memory …` | `workser help memory` |
+| Recall across conversations; leave this task's team a fact | `memory …`, `workser note` | `workser help memory` |
 | Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
 
@@ -43,7 +43,7 @@ come from the CLI itself, so they match the version you are running.
 workser status                # connection + pinned project + latest deploy
 workser whoami                # who am I / which workspace
 workser project show          # the project pinned to this directory
-workser project list          # the workspace's projects (read)
+workser project list          # your organization's projects
 workser verify                # run typecheck/lint/build — gate "done" on this
 workser doctor                # resolved endpoint, mode, token presence, project
 workser login                 # authenticate outside Orbit (CI/standalone)
@@ -52,24 +52,26 @@ workser logout                # clear a saved standalone session
 
 ## Scope (read this)
 
-You operate on **one project's own infrastructure**. You *can* provision and use it:
+You operate on **a project's own infrastructure**. You *can* provision and use it:
 create the Neon database, read its connection string, browse its tables / rows / run
 SQL, provision the bucket + auth, deploy, set env vars, manage files. Sensitive
-actions are **gated** — the daemon may return `error.code = "awaiting_approval"`
-(exit 5); say so, stop, don't loop (rule 5).
+actions are **gated** (`awaiting_approval`, exit 5) — see rule 5.
 
 What you **cannot** do is administer the project set or destroy config:
 `project create` · `project use` · `env rm` · `domain set` return
 `error.code = "owner_only"` (exit 6). Tell the user it's an owner action to do in
-Orbit, then continue with what you can. The project is already selected; you don't
-pick or switch it.
+Orbit, then continue.
+
+**One organization.** The folder (or the project open in Workser) sets it. You
+may move between its projects — `--project <id>`, or `cd`. Another org
+returns `error.code = "out_of_scope"` (exit 7) and runs nothing.
 
 ## Golden rules
 
 1. **Always pass `--json`.** Output is then a single stable line:
    `{"ok":true,"data":...}` or `{"ok":false,"error":{"code","message",...}}`. Parse it.
 2. **Orient first.** Run `workser status --json` to see the connection, the pinned
-   project, and the latest deploy before acting. You don't pick or switch projects.
+   project, and the latest deploy before acting.
    For anything beyond a trivial edit, also read what the project already knows:
    `workser decision list --json` (what was already decided, so you don't quietly
    reverse it), and `workser design show --json` before writing UI. This project
@@ -80,10 +82,10 @@ pick or switch it.
    `doc create`, plus `decision create` for a real tradeoff. A plan in your
    reply alone is gone when the conversation scrolls. How to correct a wrong
    row, and what not to link: `workser help sdlc-entities`.
-4. **Stay in your lane.** `error.code = "owner_only"` (exit 6) means the action is
-   reserved for the owner in Orbit. Don't retry or look for a workaround — tell the
-   user, then continue. Provisioning the *pinned project's own* db / bucket / auth is
-   allowed (it may be approval-gated, not owner-only).
+4. **Stay in your lane.** On `owner_only` (exit 6) or `out_of_scope` (exit 7),
+   don't retry or look for a workaround — tell the user, then continue.
+   Provisioning the *pinned project's own* db / bucket / auth is allowed (it may
+   be approval-gated, not owner-only).
 5. **Approvals are normal — likely unattended, nobody watching.** An action may
    return `{"error":{"code":"awaiting_approval"}}` (exit 5). Say so, **stop this
    turn** — never a retry loop or sleep-and-recheck, it just times out. Works next

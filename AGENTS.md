@@ -86,6 +86,8 @@ workser memory add "<content>" [--metadata <json>]  # remember something across 
 workser memory search "<query>" [--limit N]         # recall what you (or a cloud agent) learned before
 workser memory forget <memoryId>                    # soft-delete an outdated/incorrect memory
 
+workser note "<one sentence>"                       # a fact the rest of the team will need
+
 workser artifact add <path> [--kind <k>] [-d <text>]  # record a finished deliverable
 workser artifact add --url <url> --kind app          # record a deployed app
 workser artifact run                                 # which task you're attached to
@@ -113,6 +115,11 @@ workser task start [id]                             # starts only an already-app
 
 # owner-only (will return owner_only / exit 6 — ask the user to do these in Orbit):
 #   project create, project use, env rm, domain set
+
+# out_of_scope / exit 7 — this shell works inside ONE organization: the one its
+# folder (or the project open in Workser) belongs to. You may move between that
+# org's projects with `--project <id>` or by `cd`. Another organization is
+# refused and nothing runs. `project list` shows your org's projects only.
 ```
 
 ## Project tracking (the Board, Docs and Memory the user sees in Orbit)

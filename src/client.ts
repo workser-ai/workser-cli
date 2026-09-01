@@ -118,6 +118,25 @@ export async function api<T = any>(
   if (ctx.mode === "daemon" && ctx.runId) {
     headers["x-workser-run-id"] = ctx.runId;
   }
+  /**
+   * WHERE THIS COMMAND IS STANDING.
+   *
+   * The daemon scopes every CLI caller to one project and refuses the rest.
+   * What it needs for that is the FOLDER, not a project id — it reads the
+   * `.workser-project` / `.workser-app` markers off disk itself, so a client
+   * that lied about its project would be contradicted by the filesystem. The
+   * cwd is the one thing only we can tell it.
+   *
+   * Daemon only. Cloud endpoints have no business knowing a local path.
+   *
+   * PERCENT-ENCODED, always. Header values are latin-1 on the wire and Node
+   * throws `ERR_INVALID_CHAR` outright on anything else — so a project living
+   * under a folder with a Thai (or accented, or emoji) name would have made
+   * every single command fail, not degrade. The daemon decodes.
+   */
+  if (ctx.mode === "daemon" && ctx.cwd) {
+    headers["x-workser-cwd"] = encodeURIComponent(ctx.cwd);
+  }
   if (opts.body !== undefined) headers["content-type"] = "application/json";
 
   const method = opts.method ?? (opts.body !== undefined ? "POST" : "GET");

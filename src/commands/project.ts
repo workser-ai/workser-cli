@@ -200,9 +200,25 @@ export function registerProject(program: Command): void {
       }),
     );
 
+  /**
+   * The projects in this shell's ORGANIZATION.
+   *
+   * ─── IT USED TO LIST THE WHOLE ACCOUNT ──────────────────────────────────
+   *
+   * Run from inside one customer's project, this returned every project the
+   * user owns, across EVERY organization, by name and id. That is a leak in
+   * two directions at once: it shows an agent another customer's work, and it
+   * hands it the ids to act on — `--project <id>` beat the folder, so the next
+   * command could write there.
+   *
+   * The daemon now narrows the answer to the caller's organization (see
+   * `project-scope.ts`). Its own org's projects all stay, deliberately: moving
+   * between them is ordinary work, and a list that showed one would make that
+   * look forbidden.
+   */
   project
     .command("list")
-    .description("List the workspace's projects")
+    .description("List the projects in your organization")
     .action(
       action(async ({ ctx }) => {
         const items = await api(ctx, `/v1/projects`);
@@ -212,6 +228,13 @@ export function registerProject(program: Command): void {
             const pinned = ctx.projectId && p.id === ctx.projectId ? pc.green("● ") : "  ";
             line(`${pinned}${p.name ?? "—"}${p.id ? pc.dim(`  (${p.id})`) : ""}`);
           }
+          // Said out loud so a short list does not read as a broken account:
+          // the other organizations are missing on purpose, not by fault.
+          line(
+            pc.dim(
+              "\nYour organization's projects. Other organizations are not reachable from here.",
+            ),
+          );
         });
       }),
     );
