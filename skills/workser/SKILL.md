@@ -30,6 +30,7 @@ load.
 | Build an automation, or use Gmail/Slack/Stripe/Sheets | `workflow …`, `app …` | `workser help automation` |
 | Generate an image | `image …` | `workser help images` |
 | Hand a subtask to another agent | `agent …` | `workser help roles` |
+| Ship an AI agent inside the user's app | `cloud-agent …` | `workser help cloud-agents` |
 | Recall across conversations; leave this task's team a fact | `memory …`, `workser note` | `workser help memory` |
 | Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
@@ -52,10 +53,9 @@ workser logout                # clear a saved standalone session
 
 ## Scope (read this)
 
-You operate on **a project's own infrastructure**. You *can* provision and use it:
-create the Neon database, read its connection string, browse its tables / rows / run
-SQL, provision the bucket + auth, deploy, set env vars, manage files. Sensitive
-actions are **gated** (`awaiting_approval`, exit 5) — see rule 5.
+You operate on **a project's own infrastructure**, and you *can* provision and
+use it: database, bucket, auth, deploys, env vars, files. Sensitive actions are
+**gated** (`awaiting_approval`, exit 5) — see rule 5.
 
 What you **cannot** do is administer the project set or destroy config:
 `project create` · `project use` · `env rm` · `domain set` return
