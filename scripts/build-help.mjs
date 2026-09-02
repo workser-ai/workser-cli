@@ -70,10 +70,24 @@ function escapeTemplate(text) {
   return text.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
 }
 
+/**
+ * Topics that exist but are NOT shipped in `workser help`.
+ *
+ * AGENT CLOUD IS OFF FOR LAUNCH. `agent-cloud.md` is withheld rather than
+ * deleted, because the guide is fine — what is withdrawn is the offer. The
+ * command is unregistered in `src/index.ts`, the desktop app's Agents tab is
+ * hidden and the daemon's `/v1/agent-cloud` route is unmounted, so a topic left
+ * in `workser help` would be teaching a command that no longer answers.
+ *
+ * Emptying this set and re-registering the command is the whole way back.
+ */
+const WITHHELD = new Set(["agent-cloud.md"]);
+
 function generate() {
   const files = fs
     .readdirSync(REFERENCE_DIR)
     .filter((f) => f.endsWith(".md"))
+    .filter((f) => !WITHHELD.has(f))
     .sort();
 
   const topics = files.map((file) => {

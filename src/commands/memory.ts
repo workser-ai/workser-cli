@@ -54,7 +54,7 @@ export function registerMemory(program: Command): void {
           const results = res?.results ?? res ?? [];
           if (!results?.length) return line(pc.dim("No matching memories."));
           for (const r of results) {
-            line(`${pc.dim(r.id ?? "?")}  ${r.memory ?? r.content ?? ""}`);
+            line(`${pc.dim(r.id ?? "?")}  ${memoryText(r)}`);
           }
         });
       }),
@@ -72,4 +72,34 @@ export function registerMemory(program: Command): void {
         ok(res, () => line("Forgotten."));
       }),
     );
+}
+
+/**
+ * The text of one search hit, whichever shape the backend sent it in.
+ *
+ * Search returns TWO row shapes from the same query, and they are not
+ * versions of each other — they arrive interleaved in one result list:
+ *
+ *   { id, memory: "…", rootMemoryId, metadata }        // a whole memory
+ *   { id, chunk:  "…", documents: [{title}], chunks }  // a chunk of one
+ *
+ * This read `r.memory ?? r.content ?? ""`, so every chunk row rendered as a
+ * bare id and nothing else. That is the worst possible failure for a recall
+ * tool: the hit is RIGHT THERE, ranked first, and the agent reading the
+ * output sees an empty line and concludes the project never recorded it.
+ * Observed 2026-09-02 — a decision written seconds earlier came back top of
+ * the list, blank, and was re-litigated as if it had never been stored.
+ *
+ * The final fallback is a placeholder rather than `""` on purpose: a row with
+ * no text at all is a fact worth printing, and a silent blank line reads as
+ * an empty store instead of an unreadable row.
+ */
+function memoryText(r: any): string {
+  const text = r?.memory ?? r?.chunk ?? r?.content ?? r?.text;
+  if (typeof text === "string" && text.trim()) return text;
+  // A chunk row carries its parent document's title, which is a truthful
+  // (if shorter) answer to "what is this".
+  const title = r?.documents?.[0]?.title;
+  if (typeof title === "string" && title.trim()) return title;
+  return pc.dim("(no readable text on this row)");
 }

@@ -19,7 +19,11 @@ import { registerDomain } from "./commands/domain.js";
 import { registerOpen } from "./commands/open.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerAgent } from "./commands/agent.js";
+// AGENT CLOUD IS OFF FOR LAUNCH — see the note at its (commented) registration
+// below. The import stays so the command module keeps compiling and its own
+// tests keep running; only the registration is withdrawn.
 import { registerAgentCloud } from "./commands/agent-cloud.js";
+void registerAgentCloud;
 import { registerVerify } from "./commands/verify.js";
 import { registerCheckpoint } from "./commands/checkpoint.js";
 import { registerSync } from "./commands/sync.js";
@@ -105,7 +109,14 @@ registerDomain(program);
 registerOpen(program);
 registerDoctor(program);
 registerAgent(program);
-registerAgentCloud(program);
+// ── AGENT CLOUD IS OFF FOR LAUNCH ──────────────────────────────────────────
+// This is the last door. `workser agent-cloud` talks to core-api directly when
+// it holds an API key, so it does NOT go through the daemon route that was
+// unmounted — unregistering here is what actually removes it. Withdrawn with
+// the desktop menu row, the daemon mount, and the two skill index rows; the
+// help topic is withheld in `scripts/build-help.mjs`.
+//
+// registerAgentCloud(program);
 registerVerify(program);
 registerApi(program);
 registerAnalysis(program);

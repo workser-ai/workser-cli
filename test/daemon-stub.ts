@@ -178,6 +178,40 @@ function route(
 ): { status?: number; body?: unknown } | undefined {
   const { method, path } = req;
 
+  // Memory search returns TWO row shapes from one query, interleaved. This is
+  // not a fixture convenience — it is what the real backend sends, and the CLI
+  // rendered every `chunk` row as a bare id until 2026-09-02. Both shapes stay
+  // here so a reader of the fixture cannot mistake one for the whole contract.
+  if (path.endsWith("/memory/search") && method === "GET") {
+    return {
+      body: {
+        results: [
+          {
+            id: "chunkrow",
+            chunk: "Design on the canvas before rebuilding the phone app.",
+            similarity: 0.74,
+            documents: [{ id: "doc1", title: "Design on canvas…" }],
+          },
+          {
+            id: "wholerow",
+            memory: "The homepage uses the Lattice Drive editorial layout.",
+            rootMemoryId: "wholerow",
+            similarity: 0.62,
+          },
+          // No text anywhere, but a parent document that names it.
+          {
+            id: "titleonly",
+            documents: [{ id: "doc2", title: "A decision with no chunk text" }],
+            similarity: 0.61,
+          },
+          // Nothing readable at all.
+          { id: "emptyrow", similarity: 0.6 },
+        ],
+        total: 4,
+      },
+    };
+  }
+
   if (path === "/v1/checkpoints") {
     if (method === "POST") {
       return {
