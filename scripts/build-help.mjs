@@ -73,15 +73,11 @@ function escapeTemplate(text) {
 /**
  * Topics that exist but are NOT shipped in `workser help`.
  *
- * AGENT CLOUD IS OFF FOR LAUNCH. `agent-cloud.md` is withheld rather than
- * deleted, because the guide is fine — what is withdrawn is the offer. The
- * command is unregistered in `src/index.ts`, the desktop app's Agents tab is
- * hidden and the daemon's `/v1/agent-cloud` route is unmounted, so a topic left
- * in `workser help` would be teaching a command that no longer answers.
- *
- * Emptying this set and re-registering the command is the whole way back.
+ * Empty. The set is kept rather than deleted because withholding a topic is the
+ * correct move whenever a command is dark: a guide that teaches a command which
+ * does not exist is worse than no guide.
  */
-const WITHHELD = new Set(["agent-cloud.md"]);
+const WITHHELD = new Set([])
 
 function generate() {
   const files = fs

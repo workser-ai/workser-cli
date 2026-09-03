@@ -33,7 +33,7 @@ export function registerAudio(program: Command): void {
       action(async ({ ctx, opts, args }) => {
         const projectId = requireProject(ctx as Context);
         const source = await resolveMediaSource({ url: opts.url, file: opts.file });
-        const res = await api(ctx as Context, `/projects/${projectId}/audio/understand`, {
+        const res = await api(ctx as Context, `/v1/projects/${projectId}/audio/understand`, {
           method: "POST",
           body: { source, query: args[0], task: opts.task },
         });

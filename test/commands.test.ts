@@ -1701,3 +1701,135 @@ describe("env pull fills without clobbering", () => {
     expect(stub.lastRequest!.query.environment).toBe("production");
   });
 });
+
+/**
+ * THE MEDIA COMMANDS — image / video / audio.
+ *
+ * All four shipped with the `/v1` prefix missing from their path, so every
+ * one of them 404'd on its first real use with the daemon's routing message:
+ *
+ *   {"ok":false,"error":{"code":"bad_request",
+ *    "message":"Not a /v1 route.","status":404, …}}
+ *
+ * They had no tests at all, which is why four broken paths shipped together.
+ * `api-paths.test.ts` greps for the same mistake across every call site; this
+ * is the other half — the commands actually running, end to end, and the path
+ * asserted in full rather than inferred.
+ */
+describe("media commands", () => {
+  it("image generate → POST the prompt to the project's images route", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/images/generate", {
+      body: {
+        images: [
+          { filename: "a.png", publicUrl: "https://cdn/a.png", format: "png" },
+        ],
+      },
+    });
+    const res = await cli([
+      "image",
+      "generate",
+      "a teal logo",
+      "--project",
+      "p_1",
+    ]);
+    expect(res.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("POST");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/images/generate");
+    expect(stub.lastRequest!.body).toMatchObject({ prompt: "a teal logo" });
+    expect(res.json.data.images[0].publicUrl).toBe("https://cdn/a.png");
+  });
+
+  it("passes reference images through, capped at four", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/images/generate", {
+      body: { images: [{ filename: "a.png", publicUrl: "u", format: "png" }] },
+    });
+    await cli([
+      "image",
+      "generate",
+      "same but blue",
+      "--reference",
+      "https://a",
+      "https://b",
+      "https://c",
+      "https://d",
+      "https://e",
+      "--project",
+      "p_1",
+    ]);
+    expect((stub.lastRequest!.body as any).referenceImageUrls).toEqual([
+      "https://a",
+      "https://b",
+      "https://c",
+      "https://d",
+    ]);
+  });
+
+  it("says what the model said when it wrote words instead of drawing", async () => {
+    // A refusal or a clarifying question is a real outcome, not a transport
+    // failure — the agent needs the reason, not a retry.
+    stub.overrides.set("POST /v1/projects/p_1/images/generate", {
+      body: { images: [], texts: ["I can't draw that."] },
+    });
+    const res = await cli([
+      "image",
+      "generate",
+      "something",
+      "--project",
+      "p_1",
+    ]);
+    expect(res.code).not.toBe(0);
+    expect(res.json.error.code).toBe("no_image");
+    expect(res.json.error.message).toContain("I can't draw that.");
+  });
+
+  it("image understand → POST to the understand route", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/images/understand", {
+      body: { answer: "A cat." },
+    });
+    const res = await cli([
+      "image",
+      "understand",
+      "what is this?",
+      "--url",
+      "https://cdn/a.png",
+      "--project",
+      "p_1",
+    ]);
+    expect(res.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/images/understand");
+  });
+
+  it("video understand → POST to the video route", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/video/understand", {
+      body: { answer: "A demo." },
+    });
+    const res = await cli([
+      "video",
+      "understand",
+      "what happens?",
+      "--url",
+      "https://cdn/a.mp4",
+      "--project",
+      "p_1",
+    ]);
+    expect(res.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/video/understand");
+  });
+
+  it("audio understand → POST to the audio route", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/audio/understand", {
+      body: { answer: "A jingle." },
+    });
+    const res = await cli([
+      "audio",
+      "understand",
+      "transcribe it",
+      "--url",
+      "https://cdn/a.mp3",
+      "--project",
+      "p_1",
+    ]);
+    expect(res.code).toBe(0);
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/audio/understand");
+  });
+});

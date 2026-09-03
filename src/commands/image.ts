@@ -75,7 +75,7 @@ export function registerImage(program: Command): void {
 
         const res = await api<GenerateResponse>(
           ctx as Context,
-          `/projects/${projectId}/images/generate`,
+          `/v1/projects/${projectId}/images/generate`,
           {
             method: "POST",
             body: {
@@ -135,7 +135,7 @@ export function registerImage(program: Command): void {
       action(async ({ ctx, opts, args }) => {
         const projectId = requireProject(ctx as Context);
         const source = await resolveMediaSource({ url: opts.url, file: opts.file });
-        const res = await api(ctx as Context, `/projects/${projectId}/images/understand`, {
+        const res = await api(ctx as Context, `/v1/projects/${projectId}/images/understand`, {
           method: "POST",
           body: { source, query: args[0], task: opts.task },
         });

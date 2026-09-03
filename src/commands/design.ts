@@ -36,7 +36,7 @@ interface DtcgToken {
 export function registerDesign(program: Command): void {
   const design = program
     .command("design")
-    .description("Read the project's brand (colours, fonts, logo)");
+    .description("The project's brand, and pictures of the screens you draw");
 
   design
     .command("show")
@@ -105,6 +105,84 @@ export function registerDesign(program: Command): void {
         });
       }),
     );
+
+  /**
+   * `workser design shot <file...>` — a PNG of a screen you drew.
+   *
+   * ─── WHY AN AGENT NEEDS THIS ─────────────────────────────────────────────
+   *
+   * A Designer writes plain HTML per screen, which is the right thing to draw
+   * with and the wrong thing to SHOW anywhere without a browser: a chat
+   * message, a task's deliverables, a card thumbnail, a document. All of those
+   * already display images and none of them can run a page. So render once and
+   * record the picture beside the page — every one of those surfaces gets the
+   * screen for free, with no new viewer anywhere.
+   *
+   * The rendering happens in the DESKTOP app, not here: it needs a browser
+   * engine, and the daemon has one (`design-shot.ts`, an offscreen window with
+   * no Node and its own process — the same posture the page checker uses on
+   * the user's own project code).
+   *
+   * The output name is not yours to choose: `desk.html` is photographed to
+   * `desk.png`, always. That convention is what lets every reader find a
+   * screen's picture without being told where it is.
+   */
+  design
+    .command("shot")
+    .argument("<files...>", "the HTML screens to photograph, relative to the project folder")
+    .description("Render a design screen to a PNG beside it, for surfaces that can't run a page")
+    .option("--width <px>", "artboard width (default 1440)", (v) => Number(v))
+    .option("--height <px>", "artboard height (default 900)", (v) => Number(v))
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const projectId = requireProject(ctx);
+        const res = await api<{
+          root: string;
+          shots: DesignShotResult[];
+          refused: string[];
+        }>(ctx, "/v1/design-shot", {
+          method: "POST",
+          body: {
+            projectId,
+            files: args,
+            width: opts.width,
+            height: opts.height,
+          },
+        });
+
+        ok(res, () => {
+          for (const shot of res.shots ?? []) {
+            if (shot.out) {
+              line(`${pc.green("✓")} ${shot.file} ${pc.dim("→")} ${shot.out}`);
+            } else {
+              line(`${pc.red("✗")} ${shot.file} ${pc.dim(shot.error ?? "no image")}`);
+            }
+          }
+          for (const path of res.refused ?? []) {
+            // Named rather than dropped in silence: an agent that asked for a
+            // file outside the project, or for a `.png`, should find out.
+            line(pc.dim(`skipped ${path} — not a page inside this project`));
+          }
+          const made = (res.shots ?? []).filter((s) => s.out).length;
+          if (made) {
+            line("");
+            line(
+              pc.dim(
+                `Record each one so it shows up: workser artifact add <file>.png --kind design -d "<what this screen is>"`,
+              ),
+            );
+          }
+        });
+      }),
+    );
+}
+
+interface DesignShotResult {
+  file: string;
+  out?: string;
+  width: number;
+  height: number;
+  error?: string;
 }
 
 /**

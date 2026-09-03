@@ -34,7 +34,7 @@ export function registerVideo(program: Command): void {
       action(async ({ ctx, opts, args }) => {
         const projectId = requireProject(ctx as Context);
         const source = await resolveMediaSource({ url: opts.url, file: opts.file });
-        const res = await api(ctx as Context, `/projects/${projectId}/video/understand`, {
+        const res = await api(ctx as Context, `/v1/projects/${projectId}/video/understand`, {
           method: "POST",
           body: { source, query: args[0], task: opts.task },
         });

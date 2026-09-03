@@ -59,6 +59,13 @@ export interface Goal {
    */
   appIds?: string[];
   status: string;
+  /**
+   * How much to do before checking in — `slice | phase | all`.
+   *
+   * The owner's answer, and the manager is expected to honour it: with
+   * `slice`, finish one task and come back rather than walking the phase.
+   */
+  pace?: string;
   progress?: PhaseProgress[];
   currentPhase?: string | null;
   taskTotal?: number;
@@ -66,6 +73,15 @@ export interface Goal {
 }
 
 const STATUSES = ["proposed", "agreed", "working", "delivered", "abandoned"] as const;
+
+/**
+ * How much to do before coming back to the owner.
+ *
+ * The manager PROPOSES one with the shape; the owner changes it on the plan
+ * card. `phase` is the middle answer and the default — it neither stops after
+ * every task nor runs unattended through work nobody has seen.
+ */
+const PACES = ["slice", "phase", "all"] as const;
 
 export function registerGoal(program: Command): void {
   const goal = program
@@ -131,6 +147,10 @@ export function registerGoal(program: Command): void {
       "--criteria <json>",
       'what "done" means per phase, in the OWNER\'s words: \'{"Checkout":["A customer can pay by card and gets a receipt"]}\'',
     )
+    .option(
+      "--pace <value>",
+      `how much to do before checking in — slice (one task, then show), phase (the current phase, the default), all (${PACES.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         requireProject(ctx);
@@ -176,11 +196,21 @@ export function registerGoal(program: Command): void {
           }
         }
 
+        // Refused rather than coerced, and the refusal names the three: a
+        // typo that silently became `all` would be a typo that ran unattended
+        // through work the owner never agreed to.
+        if (opts.pace !== undefined && !PACES.includes(opts.pace)) {
+          throw new WorkserError(
+            `Unknown --pace "${opts.pace}". Use one of: ${PACES.join(", ")}.`,
+          );
+        }
+
         const row = await api<Goal>(ctx, "/v1/project-goals", {
           body: {
             projectId: ctx.projectId,
             title: args[0],
             outcome: opts.outcome,
+            pace: opts.pace,
             phases: phases.map((name) => ({
               name,
               criteria: (criteria[name] ?? []).map((text, i) => ({
@@ -331,11 +361,17 @@ export function registerGoal(program: Command): void {
     .option("--outcome <text>", "what 'done' means")
     .option("--phase <name...>", "replace the ordered phase list")
     .option("--status <value>", `one of: ${STATUSES.join(" | ")}`)
+    .option("--pace <value>", `how much to do before checking in (${PACES.join(" | ")})`)
     .action(
       action(async ({ ctx, args, opts }) => {
         if (opts.status && !STATUSES.includes(opts.status)) {
           throw new WorkserError(
             `Unknown status "${opts.status}". Use one of: ${STATUSES.join(", ")}.`,
+          );
+        }
+        if (opts.pace && !PACES.includes(opts.pace)) {
+          throw new WorkserError(
+            `Unknown --pace "${opts.pace}". Use one of: ${PACES.join(", ")}.`,
           );
         }
         const row = await api<Goal>(
@@ -348,6 +384,7 @@ export function registerGoal(program: Command): void {
               outcome: opts.outcome,
               phases: opts.phase,
               status: opts.status,
+              pace: opts.pace,
             },
           },
         );
@@ -380,6 +417,10 @@ function printGoal(g: Goal | null): void {
   line(`${pc.bold(g.title)}  ${pc.dim(g.id)}`);
   line(statusTag(g.status));
   if (g.outcome) line(`\ndone means: ${g.outcome}`);
+  // The pace is a standing instruction to whoever reads this, so it is
+  // printed with the status rather than buried: `slice` means finish one task
+  // and come back, and an agent that skips this line walks the whole phase.
+  if (g.pace) line(pc.dim(`pace: ${paceLine(g.pace)}`));
 
   const progress = g.progress ?? [];
   if (!progress.length) {
@@ -440,3 +481,10 @@ function statusTag(status: string): string {
 }
 
 export type { Context };
+
+/** The pace, said as an instruction rather than as a word. */
+function paceLine(pace: string): string {
+  if (pace === "slice") return "slice — do ONE task, then stop and show the owner";
+  if (pace === "all") return "all — work through the phases; report at the end";
+  return "phase — the current phase, task by task";
+}

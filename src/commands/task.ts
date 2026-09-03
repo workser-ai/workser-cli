@@ -66,6 +66,21 @@ const PRIORITIES = ["urgent", "high", "normal", "low"] as const;
 const SIZES = ["small", "standard"] as const;
 
 /**
+ * How long a task should take — the five buckets the plan card adds up.
+ *
+ * NOT `--size`, which is next to it and is a different question: that one is a
+ * GATE (`small` lets a channel start without asking) and is deliberately
+ * binary. This one is a COMMUNICATION device and gates nothing; a task with no
+ * estimate still runs.
+ *
+ * Time rather than points, because the reader is a business owner and a point
+ * is a unit you have to be taught. Buckets rather than minutes, because an
+ * agent asked for a number invents one ("37 minutes") and false precision is
+ * worse than a rough answer.
+ */
+const ESTIMATES = ["10m", "30m", "45m", "1h", "1h+"] as const;
+
+/**
  * The roles the dispatcher can actually run.
  *
  * THIS LIST WAS SIX NAMES LONG AND THE DISPATCHER HAS THIRTEEN. `--role mobile`
@@ -286,6 +301,10 @@ export function registerTask(program: Command): void {
       `small lets the channel start it without asking; standard asks (${SIZES.join(" | ")})`,
     )
     .option(
+      "--estimate <value>",
+      `roughly how long this should take, shown on the plan (${ESTIMATES.join(" | ")})`,
+    )
+    .option(
       "--status <value>",
       `start it somewhere other than 'todo' — use 'backlog' for a later phase's work (${STATUSES.join(" | ")})`,
     )
@@ -299,6 +318,11 @@ export function registerTask(program: Command): void {
         // decides whether a person is consulted, so a typo must fail loudly
         // instead of falling through to whichever side the server defaults to.
         if (opts.size !== undefined) assertOneOf("--size", opts.size, SIZES);
+        // Loud rather than silent: an unrecognised bucket would be stored and
+        // then rendered as raw text on a card read by somebody who cannot tell
+        // a typo from a feature.
+        if (opts.estimate !== undefined)
+          assertOneOf("--estimate", opts.estimate, ESTIMATES);
         if (opts.status !== undefined)
           assertOneOf("--status", opts.status, STATUSES);
 
@@ -317,6 +341,7 @@ export function registerTask(program: Command): void {
             phase: opts.phase,
             priority: opts.priority,
             size: opts.size,
+            estimate: opts.estimate,
             // `backlog` for a later phase's work: written down so the owner can
             // read the whole plan, with nothing for the runner to pick up.
             status: opts.status,

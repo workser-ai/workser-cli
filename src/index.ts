@@ -109,14 +109,12 @@ registerDomain(program);
 registerOpen(program);
 registerDoctor(program);
 registerAgent(program);
-// ── AGENT CLOUD IS OFF FOR LAUNCH ──────────────────────────────────────────
-// This is the last door. `workser agent-cloud` talks to core-api directly when
-// it holds an API key, so it does NOT go through the daemon route that was
-// unmounted — unregistering here is what actually removes it. Withdrawn with
-// the desktop menu row, the daemon mount, and the two skill index rows; the
-// help topic is withheld in `scripts/build-help.mjs`.
-//
-// registerAgentCloud(program);
+// Agent Cloud. A THIRD door, not a duplicate of the daemon route: `workser
+// agent-cloud` talks to core-api DIRECTLY whenever it holds an API key, so it
+// does not pass through the daemon mount at all. Registered together with that
+// mount, the desktop menu row, the help topic in `scripts/build-help.mjs` and
+// the two skill index rows.
+registerAgentCloud(program);
 registerVerify(program);
 registerApi(program);
 registerAnalysis(program);

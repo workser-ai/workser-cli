@@ -30,6 +30,7 @@ load.
 | Build an automation, or use Gmail/Slack/Stripe/Sheets | `workflow …`, `app …` | `workser help automation` |
 | Generate an image | `image …` | `workser help images` |
 | Hand a subtask to another agent | `agent …` | `workser help roles` |
+| Ship an AI agent inside the user's app | `agent-cloud …` | `workser help agent-cloud` |
 | Recall across conversations; leave this task's team a fact | `memory …`, `workser note` | `workser help memory` |
 | Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
