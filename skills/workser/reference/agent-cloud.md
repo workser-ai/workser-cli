@@ -79,6 +79,11 @@ workser agent-cloud machines          # video, data analysis, design, ...
 A model marked "needs your own key" will make `publish` FAIL unless a matching
 secret is stored first. Add the key with `add <id> secret` before setting it.
 
+`default_model` must stay a **chat model** — setting it to an image model
+publishes an agent that never answers anybody. Pictures, video, voice and
+transcription are abilities, not models you set, and one call from the app's
+own code needs no agent at all: `workser help agent-cloud-media`.
+
 ## Agents need a paid plan — the trial does not include them
 
 `create` and `run` both refuse with **402** on a free or trialling
@@ -86,9 +91,9 @@ organisation. That is a rule, not a fault: every run buys model tokens and
 holds a machine, so it costs real money the moment it happens.
 
 **When you hit it, hand the plan over — do not just describe it.** Workser
-files the refusal on the conversation as a step and an artifact the user can
-click, so the person you are helping gets something actionable rather than a
-paragraph. Say plainly what you were doing, that agents need a plan, and stop.
+files the refusal on the conversation as a clickable step and artifact, so the
+person gets something actionable. Say what you were doing, that agents need a
+plan, and stop.
 
 Do NOT:
 

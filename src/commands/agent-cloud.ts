@@ -443,25 +443,59 @@ export function registerAgentCloud(program: Command): void {
     .command("models")
     .description("Models this organisation can run an agent on, cheapest first")
     .option("--all", "Include models that need your own provider key")
+    // WHAT THE MODEL MAKES. Without this the list is chat models and nothing
+    // else — not by choice, but because the catalogue used to throw away every
+    // image, video, speech and transcription row before anyone could ask for
+    // one. An agent that needs to draw a picture needs to be told which models
+    // can, and this is the local agent's only way to find out.
+    .option(
+      "--kind <kind>",
+      "text | image | video | speech | transcription | embedding (comma-separated)",
+    )
+    .option("--accepts <inputs>", "Only models that can read this: image, audio, video, file")
     .action(
       action(async ({ ctx, opts }) => {
-        const res = await api(ctx, "/v1/agent-cloud/catalog/models/live");
+        const q = new URLSearchParams();
+        if (opts.kind) q.set("kind", String(opts.kind));
+        if (opts.accepts) q.set("accepts", String(opts.accepts));
+        // `tools_only=false` whenever a non-text kind is asked for: image and
+        // speech models do not call tools and never will, so the server's
+        // sensible default for a CHAT picker would answer "there are none".
+        if (opts.kind && !String(opts.kind).split(",").includes("text")) {
+          q.set("tools_only", "false");
+        }
+        const suffix = q.toString() ? `?${q.toString()}` : "";
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/catalog/models/gateways${suffix}`,
+        );
         const models = (res?.models ?? []).filter(
           (m: any) => opts.all || m.credit_tier === "PLATFORM_CREDITS",
         );
         ok(res, () => {
           if (!models.length) {
-            warn("The live model list could not be read.");
+            warn(
+              opts.kind
+                ? `No ${opts.kind} models are available on your credits. Try --all.`
+                : "The live model list could not be read.",
+            );
             return;
           }
           for (const m of models.slice(0, 40)) {
+            // A per-generation model priced "per million" is out by six orders
+            // of magnitude — see `PriceInfo.unit` in core-api.
             const price =
-              typeof m.input_price_per_million_usd === "number"
-                ? `$${m.input_price_per_million_usd.toFixed(2)}/M in`
-                : "price unknown";
+              m.price_unit === "each"
+                ? typeof m.credits_each === "number"
+                  ? `${m.credits_each} credits each`
+                  : "price unknown"
+                : typeof m.input_price_per_million_usd === "number"
+                  ? `$${m.input_price_per_million_usd.toFixed(2)}/M in`
+                  : "price unknown";
             const byok =
               m.credit_tier === "PLATFORM_CREDITS" ? "" : pc.yellow("  needs your own key");
-            line(`${pc.bold(m.id)}  ${pc.dim(price)}${byok}`);
+            const kind = m.kind && m.kind !== "text" ? pc.dim(`  [${m.kind}]`) : "";
+            line(`${pc.bold(m.model ?? m.id)}${kind}  ${pc.dim(price)}${byok}`);
           }
         });
       }),
