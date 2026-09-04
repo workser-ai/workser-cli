@@ -113,3 +113,10 @@ same rule.
 - **Cloud and local are different environments.** `env set` configures the
   cloud; the files in the app folder configure this computer. Don't hand-edit
   one to change the other.
+
+## Another app's variables
+
+Every command here takes `--app <webAppId>`; without it you are operating on
+the app whose folder you are in. Reading a sibling service's config, copying a
+value across, and pointing a client at a service are all covered in
+`workser help apps`.
