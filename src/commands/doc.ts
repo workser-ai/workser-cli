@@ -32,8 +32,80 @@ interface OrbitDocument {
   title: string;
   contentJson: string;
   filePath: string | null;
+  /** Free tags, shared with the project's work items — absent on an older API. */
+  labels?: string[];
+  /** Which app this document is about, or null. */
+  webAppId?: string | null;
+  /** Which parts of the infrastructure it concerns. */
+  infraRefs?: string[];
+  /** architecture | api-spec | flow | tech-spec | plan | note, or null. */
+  docKind?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * WHAT KIND OF DOCUMENT THIS IS.
+ *
+ * A MIRROR of `src/app/orbit/lib/docKinds.pure.ts` and the daemon's
+ * `doc-kinds.ts` — three separate build targets, none able to import the
+ * others. See the renderer copy for why the vocabulary is what it is.
+ *
+ * The hints are not decoration. Without them every document an agent writes
+ * becomes a `plan`, because that is the one word whose meaning is obvious
+ * without being told.
+ */
+const DOC_KINDS: Record<string, string> = {
+  architecture: "how the whole thing fits together — the parts and their edges",
+  "api-spec": "the contract between two parts: routes, shapes, errors",
+  flow: "a sequence — a user journey, or a path data takes",
+  "tech-spec": "the design of ONE change, written before it is built",
+  plan: "the steps to do it, and in what order",
+  note: "deliberately not a spec — a capture, a scratch page",
+};
+
+const KIND_HELP = Object.entries(DOC_KINDS)
+  .map(([kind, hint]) => `${kind} (${hint})`)
+  .join("; ");
+
+/**
+ * The metadata a caller actually set — never a key it left alone.
+ *
+ * `--label a --label b` arrives as an array from commander's `<name...>`; a
+ * single `--label a` arrives as a one-element array. Omitting a flag leaves the
+ * field `undefined`, which upstream reads as "do not change", so an update that
+ * only sets the title cannot silently clear the labels.
+ */
+function metaBody(opts: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  const labels = toList(opts.label);
+  const infra = toList(opts.infra);
+  if (labels) body.labels = labels;
+  if (infra) body.infraRefs = infra;
+  if (typeof opts.app === "string") body.webAppId = opts.app;
+  if (typeof opts.kind === "string") {
+    // REFUSED, not silently dropped. Everywhere else here a bad value is
+    // ignored, because losing a tag is cheaper than losing the document it was
+    // on. The kind is different: it is the field that answers "does this
+    // project have an architecture document", and a misspelled one produces a
+    // confident NO. Better to fail the call and say the six words.
+    if (!(opts.kind in DOC_KINDS)) {
+      throw new WorkserError(
+        `Unknown --kind "${opts.kind}". Use one of: ${Object.keys(DOC_KINDS).join(", ")}.`,
+        { code: "bad_request" },
+      );
+    }
+    body.kind = opts.kind;
+  }
+  return body;
+}
+
+function toList(value: unknown): string[] | undefined {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === "string");
+  }
+  return undefined;
 }
 
 export function registerDoc(program: Command): void {
@@ -47,12 +119,32 @@ export function registerDoc(program: Command): void {
     // alike — Orbit's Docs panel hides the linked ones because it shows them on
     // their card instead, but an agent looking for prior art wants both.
     .option("--work-item <id>", "the document linked to this card, if there is one")
+    // Narrowing, so "has anyone written about this already" is one call rather
+    // than a list of four hundred to read. Matched on the server, so the answer
+    // covers the whole project and not just the first page of it.
+    .option("--search <text>", "match the title, case-insensitively")
+    .option("--label <name>", "only documents carrying this label")
+    .option("--app <id>", "only documents about this app")
+    .option("--infra <name>", "only documents touching this part of the infrastructure")
+    // `--kind none` is the one that matters most: it answers "what has been
+    // written here and never filed", which is the backlog, and "is there an
+    // architecture document at all" is `--kind architecture` returning nothing.
+    .option("--kind <kind>", `only this kind — ${Object.keys(DOC_KINDS).join(" | ")} | none`)
+    .option("--limit <n>", "cap the number returned (most recently updated first)")
     .action(
       action(async ({ ctx, opts }) => {
         const projectId = requireProject(ctx);
         const rows =
           (await api<OrbitDocument[]>(ctx, `/v1/projects/${projectId}/documents`, {
-            query: { workItemId: opts.workItem },
+            query: {
+              workItemId: opts.workItem,
+              q: opts.search,
+              label: opts.label,
+              webAppId: opts.app,
+              infra: opts.infra,
+              kind: opts.kind,
+              limit: opts.limit,
+            },
           })) ?? [];
         ok(rows, () => {
           if (!rows.length) {
@@ -62,7 +154,12 @@ export function registerDoc(program: Command): void {
           for (const r of rows) {
             const link = r.workItemId ? pc.dim(` ↳ ${r.workItemId}`) : "";
             const file = r.filePath ? pc.dim(`  ${r.filePath}`) : "";
-            line(`${pc.dim(r.id)}  ${r.title}${link}${file}`);
+            const tags = [...(r.labels ?? []), ...(r.infraRefs ?? [])];
+            const meta = tags.length ? pc.dim(`  [${tags.join(", ")}]`) : "";
+            // The kind leads, because it is what tells a reader whether this
+            // row is worth opening before they read the title.
+            const kind = r.docKind ? pc.dim(`${r.docKind}  `) : "";
+            line(`${pc.dim(r.id)}  ${kind}${r.title}${meta}${link}${file}`);
           }
         });
       }),
@@ -108,6 +205,17 @@ export function registerDoc(program: Command): void {
     .option("--work-item <id>", "link this document to a work item")
     .option("--markdown <text>", "document body as markdown")
     .option("--content-json <json>", "document body as rich-text content JSON")
+    // WHAT IT IS ABOUT — the three fields that make a list of four hundred
+    // documents searchable instead of scrollable. Agents write most of these,
+    // so if the CLI cannot set them the metadata is empty forever and the
+    // filters on the Docs screen have nothing to filter.
+    .option("--kind <kind>", `what this document IS — ${KIND_HELP}`)
+    .option("--label <name...>", "tag it — shares the project's label vocabulary")
+    .option("--app <id>", "which app this document is about")
+    .option(
+      "--infra <name...>",
+      "what it touches: database, storage, auth, domains, functions, env, connections, deploy",
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         const projectId = requireProject(ctx);
@@ -122,6 +230,7 @@ export function registerDoc(program: Command): void {
             workItemId: opts.workItem,
             markdown: opts.markdown,
             contentJson: opts.contentJson,
+            ...metaBody(opts),
           },
         });
 
@@ -133,6 +242,36 @@ export function registerDoc(program: Command): void {
         });
 
         ok(row, () => line(`Created document ${pc.bold(row?.id ?? "")} — ${title}`));
+      }),
+    );
+
+  doc
+    .command("file <id>")
+    .description("File an existing document — its kind, labels, app, infrastructure")
+    // The retro-fit. Fourteen documents already exist in a typical project and
+    // every one of them is unfiled; without this the only way to classify them
+    // is to rewrite them.
+    .option("--kind <kind>", `what this document IS — ${KIND_HELP}`)
+    .option("--label <name...>", "tag it — shares the project's label vocabulary")
+    .option("--app <id>", "which app this document is about")
+    .option("--infra <name...>", "what it touches: database, storage, auth, …")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const projectId = requireProject(ctx);
+        const id = String(args[0] ?? "").trim();
+        const body = metaBody(opts);
+        if (!id || Object.keys(body).length === 0) {
+          throw new WorkserError(
+            "Give a document id and at least one of --kind / --label / --app / --infra.",
+            { code: "bad_request" },
+          );
+        }
+        const row = await api<OrbitDocument>(
+          ctx,
+          `/v1/projects/${projectId}/documents/${id}`,
+          { method: "PATCH", body },
+        );
+        ok(row, () => line(`Filed ${pc.bold(row?.title ?? id)}.`));
       }),
     );
 

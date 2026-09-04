@@ -22,10 +22,14 @@ subtasks, not here — see `workser help tasks`.
 > planned work — see `workser help tasks`.
 
 ```
-workser decision list [--limit <n>]
+workser decision list [--limit <n>] [--search <text>] [--label <name>]
+                     [--app <id>] [--infra <name>] [--status <name>]
 workser decision show <id>
 workser decision create <title> --context <text> --decision <text>
                                  [--consequences <text>]
+                                 [--label <name...>] [--app <id>] [--infra <name...>]
+workser decision tag <id> [--label <name...>] [--app <id>] [--infra <name...>]
+workser decision supersede <id> [--delete]
 
 workser requirement list [--status <value>] [--limit <n>]
 workser requirement show <id>
@@ -39,7 +43,8 @@ workser requirement update <id> [--title <text>] [--body <text>] [--status <text
 Before starting anything beyond a trivial edit:
 
 ```
-workser decision list --json       # what was already decided (don't reverse it)
+workser decision list --json                      # what was already decided
+workser decision list --infra database --json     # …about the thing you're touching
 ```
 
 The project outlives your session. A decision recorded three weeks ago is the
@@ -48,21 +53,24 @@ purpose — `workser decision show <id>` gives you the context and consequences,
 not just the title. Reach for `workser doc list` / `workser requirement list`
 the same way when the task touches documented behaviour.
 
+**Narrow it.** "Read four hundred decisions first" is advice nobody follows;
+"read the eleven about the database" is. `--search`, `--label`, `--app` and
+`--infra` match on the server, so the answer covers the whole project rather
+than the first page of it. `decision tag <id>` files one that already exists.
+
 ## Work with phases → subtasks + a plan doc, before you build
 
 The moment you split a task into more than one phase, file it — not afterwards,
 and not only in your reply, which is gone once the conversation scrolls.
 
 ```bash
-# the phases themselves — this task's own subtask list, not the Board
-workser task subtask add "Phase 1 — schema + migration" --role api \
-  --note "Add orders/line_items tables and the migration."
-workser task subtask add "Phase 2 — checkout API" --role api --note "…"
+# the phases — this task's own subtask list, not the Board
+workser task subtask add "Phase 1 — schema + migration" --role api --note "…"
 
 # the plan's narrative, ONE doc, deliberately NOT linked to a subtask
-workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
+workser doc create "Checkout — plan" --kind plan --markdown "$(cat plan.md)" --json
 
-# the approach, if the plan settled something with real alternatives
+# the approach, if it settled something with real alternatives
 workser decision create "Carts live server-side" --context "…" --decision "…" --json
 ```
 
@@ -89,10 +97,16 @@ it.
 
 `decision create` is for something with real tradeoffs worth a paper trail:
 `--context` is why it came up, `--decision` what was decided, `--consequences`
-the follow-on effects. There is deliberately **no `decision update`** — a record
-states what was decided at a point in time. When it stops being right, record a
-new decision that supersedes it and say so in its `--context`. Editing the
+the follow-on effects. There is deliberately **no text edit** — a record
+states what was decided at a point in time. When it stops being right, run
+`workser decision supersede <id>` and record a new one saying why. Editing the
 history is how a decision log stops being worth reading.
+
+`decision tag` is the exception, and only because none of what it changes is
+part of what was decided: labels, the app, the infrastructure are how a record
+is FILED, not what it says. `supersede --delete` removes a row outright — for
+one created in error, never for a decision that was really made and later
+reversed.
 
 Requirements legitimately move along, so they do have `update`.
 

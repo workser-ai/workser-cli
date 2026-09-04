@@ -929,7 +929,7 @@ See \`reference/deliverables.md\`.
   {
     topic: "docs",
     title: "Project documents",
-    summary: "Write and revise the project's pages, keep the markdown mirror readable, and put the diagram in the document rather than in your reply.",
+    summary: "Say what kind of document it is, write the shape before you build, revise the page that exists, and put the diagram in the document rather than in your reply.",
     commands: ["doc"],
     source: "skills/workser/reference/docs.md",
     body: `# Project documents
@@ -939,13 +939,48 @@ mirror at \`.workser/docs/<id>.md\`. Both are the same document: the panel rende
 the rich text, the mirror is what you, git and the next agent can read as text.
 
 \`\`\`
-workser doc list [--work-item <id>]
+workser doc list [--work-item <id>] [--kind <kind>] [--search <text>]
+                 [--label <name>] [--app <id>] [--infra <name>] [--limit <n>]
 workser doc show <id> [--markdown]
-workser doc create <title> [--work-item <id>] [--markdown <text>]
-                            [--content-json <json>]
+workser doc create <title> [--kind <kind>] [--work-item <id>] [--markdown <text>]
+                            [--label <name...>] [--app <id>] [--infra <name...>]
 workser doc update <id> [--title <text>] [--markdown <text>]
+workser doc file <id> [--kind <kind>] [--label <name...>] [--app <id>] [--infra <name...>]
 workser doc diagram <id> [--check]
 \`\`\`
+
+## Shape it before you build it
+
+\`--kind\` says what a document IS: \`architecture\` (how the parts fit together),
+\`api-spec\` (the contract between two of them), \`flow\` (a sequence), \`tech-spec\`
+(the design of one change), \`plan\` (the steps), \`note\` (not a spec).
+
+The first four are the project's **shape**. \`plan\` is not one of them — a list
+of steps says what will be done, not how the thing works, so a project whose
+only design document is a plan has no design on record.
+
+**Structural work gets a shape document FIRST** — a new app or service, a schema
+change, sign-in, money, a new outside integration. Write it, then \`--ref\` it to
+the engineers who build against it. Everything smaller skips it: a design
+nobody needed is a cost the owner pays and nobody reads.
+
+This is the default, not a rule: an owner who says the shape is already
+settled, or asks for the thing built directly, gets it built. Say once that
+you skipped the design because they asked — a skip on the record is a
+decision; a silent one is a gap somebody finds later.
+
+\`\`\`
+workser doc create "Checkout — how it fits together" --kind architecture \\
+  --markdown "$(cat arch.md)" --app <appId> --label checkout --infra database
+workser doc list --kind architecture --json   # is there one at all?
+workser doc list --kind none --json           # written, never filed
+workser doc file <id> --kind api-spec         # classify one that exists
+\`\`\`
+
+\`--infra\` uses the project's own screen names — \`database\`, \`storage\`, \`auth\`,
+\`domains\`, \`functions\`, \`env\`, \`connections\`, \`deploy\` — so a tag is also a link
+to the thing it is about. \`--label\` shares one vocabulary with work items and
+decisions: tag a doc \`checkout\` and the board offers the same word back.
 
 ## Revise the page that exists
 
@@ -1464,10 +1499,14 @@ subtasks, not here — see \`workser help tasks\`.
 > planned work — see \`workser help tasks\`.
 
 \`\`\`
-workser decision list [--limit <n>]
+workser decision list [--limit <n>] [--search <text>] [--label <name>]
+                     [--app <id>] [--infra <name>] [--status <name>]
 workser decision show <id>
 workser decision create <title> --context <text> --decision <text>
                                  [--consequences <text>]
+                                 [--label <name...>] [--app <id>] [--infra <name...>]
+workser decision tag <id> [--label <name...>] [--app <id>] [--infra <name...>]
+workser decision supersede <id> [--delete]
 
 workser requirement list [--status <value>] [--limit <n>]
 workser requirement show <id>
@@ -1481,7 +1520,8 @@ workser requirement update <id> [--title <text>] [--body <text>] [--status <text
 Before starting anything beyond a trivial edit:
 
 \`\`\`
-workser decision list --json       # what was already decided (don't reverse it)
+workser decision list --json                      # what was already decided
+workser decision list --infra database --json     # …about the thing you're touching
 \`\`\`
 
 The project outlives your session. A decision recorded three weeks ago is the
@@ -1490,21 +1530,24 @@ purpose — \`workser decision show <id>\` gives you the context and consequence
 not just the title. Reach for \`workser doc list\` / \`workser requirement list\`
 the same way when the task touches documented behaviour.
 
+**Narrow it.** "Read four hundred decisions first" is advice nobody follows;
+"read the eleven about the database" is. \`--search\`, \`--label\`, \`--app\` and
+\`--infra\` match on the server, so the answer covers the whole project rather
+than the first page of it. \`decision tag <id>\` files one that already exists.
+
 ## Work with phases → subtasks + a plan doc, before you build
 
 The moment you split a task into more than one phase, file it — not afterwards,
 and not only in your reply, which is gone once the conversation scrolls.
 
 \`\`\`bash
-# the phases themselves — this task's own subtask list, not the Board
-workser task subtask add "Phase 1 — schema + migration" --role api \\
-  --note "Add orders/line_items tables and the migration."
-workser task subtask add "Phase 2 — checkout API" --role api --note "…"
+# the phases — this task's own subtask list, not the Board
+workser task subtask add "Phase 1 — schema + migration" --role api --note "…"
 
 # the plan's narrative, ONE doc, deliberately NOT linked to a subtask
-workser doc create "Checkout — implementation plan" --markdown "$(cat plan.md)" --json
+workser doc create "Checkout — plan" --kind plan --markdown "$(cat plan.md)" --json
 
-# the approach, if the plan settled something with real alternatives
+# the approach, if it settled something with real alternatives
 workser decision create "Carts live server-side" --context "…" --decision "…" --json
 \`\`\`
 
@@ -1531,10 +1574,16 @@ it.
 
 \`decision create\` is for something with real tradeoffs worth a paper trail:
 \`--context\` is why it came up, \`--decision\` what was decided, \`--consequences\`
-the follow-on effects. There is deliberately **no \`decision update\`** — a record
-states what was decided at a point in time. When it stops being right, record a
-new decision that supersedes it and say so in its \`--context\`. Editing the
+the follow-on effects. There is deliberately **no text edit** — a record
+states what was decided at a point in time. When it stops being right, run
+\`workser decision supersede <id>\` and record a new one saying why. Editing the
 history is how a decision log stops being worth reading.
+
+\`decision tag\` is the exception, and only because none of what it changes is
+part of what was decided: labels, the app, the infrastructure are how a record
+is FILED, not what it says. \`supersede --delete\` removes a row outright — for
+one created in error, never for a decision that was really made and later
+reversed.
 
 Requirements legitimately move along, so they do have \`update\`.
 
