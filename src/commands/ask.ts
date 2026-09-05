@@ -47,6 +47,32 @@ const TYPES = [
   "create_app",
 ] as const;
 
+/**
+ * THE APP KINDS AN OWNER CAN ACTUALLY BE ASKED FOR.
+ *
+ * This list is why a desktop app got created as a web app. The flag's help
+ * text used to read `web | mobile | api | worker | cron | python` — which
+ * offered three kinds core-api refuses to create and OMITTED `desktop`, the
+ * one that works. An agent that wanted a desktop app read the list, did not
+ * find it, and asked for the nearest thing on offer. The owner clicked Yes on
+ * a card that said "desktop", and a Next.js web app was provisioned: right
+ * intent, wrong app, no error anywhere.
+ *
+ * MUST MATCH the `creatable: true` rows in core-api's `APP_TYPE_STACKS`. A
+ * kind here that is not creatable there is a card the owner cannot act on; a
+ * creatable kind missing here is the bug above, again.
+ */
+const APP_TYPES = [
+  "web",
+  "mobile",
+  "desktop",
+  // `api` is the shorthand; the two concrete spellings pick the runtime and
+  // are accepted at this boundary for an agent that knows which one it wants.
+  "api",
+  "api-hono",
+  "api-python",
+] as const;
+
 export function registerAsk(program: Command): void {
   program
     .command("ask <message>")
@@ -65,7 +91,7 @@ export function registerAsk(program: Command): void {
     )
     .option(
       "--app-type <type>",
-      "create_app only: web | mobile | api | worker | cron | python",
+      `create_app only: ${APP_TYPES.join(" | ")}`,
     )
     .option(
       "--app-name <name>",
@@ -109,7 +135,21 @@ export function registerAsk(program: Command): void {
         // agent asking precisely because the project has no MOBILE app.
         if (type === "create_app" && !opts.appType) {
           throw new WorkserError(
-            "Say which kind of app: `--app-type mobile`.",
+            `Say which kind of app: \`--app-type desktop\`. One of: ${APP_TYPES.join(", ")}.`,
+            { code: "bad_request" },
+          );
+        }
+        // REFUSED, NOT PASSED THROUGH. An unknown kind used to travel all the
+        // way to the card, which defaulted it to `web` — so a typo or a kind
+        // this build cannot make came back as a web app rather than as a
+        // mistake. Fail here, where the agent can read the list and retry.
+        if (
+          type === "create_app" &&
+          opts.appType &&
+          !APP_TYPES.includes(opts.appType as (typeof APP_TYPES)[number])
+        ) {
+          throw new WorkserError(
+            `Unknown --app-type "${opts.appType}". Use one of: ${APP_TYPES.join(", ")}.`,
             { code: "bad_request" },
           );
         }

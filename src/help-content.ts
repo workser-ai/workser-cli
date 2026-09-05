@@ -924,8 +924,35 @@ turn.
 
 Types: \`input\` (default, free text), \`choice\` (with \`--option\`), \`approval\`
 (permission), \`confirmation\` (check an assumption), \`information\` (FYI, no answer
-needed). It times out (default 10 min) rather than hanging forever; if it does, carry
-on and state clearly what you assumed.
+needed), \`create_app\` (below). It times out (default 10 min) rather than hanging
+forever; if it does, carry on and state clearly what you assumed.
+
+## Asking for an app that does not exist yet
+
+The project needs a kind of app it does not have — a backend for the phone app, a
+desktop build of the website. **You cannot create one yourself**, by design: apps
+are real infrastructure on the owner's account. Ask, and their click creates it.
+The answer gives you the new app's id.
+
+\`\`\`
+workser ask "The phone app needs an API to hold its data. Add one?" \\
+  --type create_app --app-type api --app-name "Lattice Drive API"
+\`\`\`
+
+\`--app-type\` is required and must be one of:
+
+| | |
+|---|---|
+| \`web\` | Next.js site on Workser hosting |
+| \`mobile\` | Expo / React Native phone app |
+| \`desktop\` | Next.js + Electron, installs on a Mac or PC |
+| \`api\` | backend service — \`api-hono\` (TypeScript) or \`api-python\` (FastAPI) |
+
+**Name the kind you actually mean.** Asking for \`web\` because you are unsure is
+how a desktop app gets created as a website: the card shows the owner the kind
+you named, they approve THAT, and the wrong app is provisioned under your own
+sentence asking for the right one. An unknown kind is refused with the list
+above rather than guessed at — read it and ask again.
 
 **Never ask for a secret value this way** — the answer is stored and displayed. Ask
 *where* a key should go, then have the user set it (\`workser env set\` writes it
@@ -1002,6 +1029,105 @@ workser artifact add --url https://acme.workser.app --kind app -t "Storefront"
 \`\`\`
 
 See \`reference/deliverables.md\`.
+`,
+  },
+  {
+    topic: "desktop",
+    title: "Desktop apps — one codebase, a window, and an installer",
+    summary: "How a Workser desktop app is built, what breaks only after it is installed, and how to produce and publish a signed installer.",
+    commands: ["project","env","deploy"],
+    source: "skills/workser/reference/desktop.md",
+    body: `# Desktop apps
+
+A Workser desktop app is **one Next.js codebase with two ways to run**: a normal
+web build for development and preview, and an Electron shell that loads the
+static export from disk and gets packaged into an installer.
+
+There is no deploy. A desktop app has no Vercel project and no URL — its
+preview is the app running locally, and its deliverable is a file someone
+double-clicks.
+
+## The rule that breaks everything, and only after install
+
+**The app must stay statically exportable.** A packaged Electron app loads from
+\`file://\` and has **no Node server**. So none of this exists once it is
+installed:
+
+- server components that fetch at request time
+- server actions (\`"use server"\`)
+- route handlers under \`app/api/*\`
+- \`next/image\` optimisation
+
+Every one of them works in \`npm run dev\` **and** in the local preview, and fails
+only on the owner's machine. That is the one direction of error nobody catches,
+so \`next.config.mjs\` keeps \`output: "export"\` to make the build fail loudly
+instead. Do not remove it to "fix" an import.
+
+Need a server? Use the project's api app — \`workser project apps\` to find it,
+then read its URL and set \`NEXT_PUBLIC_API_URL\`. See \`workser help apps\`.
+
+## Secrets: this is a public client
+
+Anyone who installs the app can read every string inside it. So:
+
+- \`NEXT_PUBLIC_*\` only, and nothing behind that prefix is private
+- never a database URL, an API key, or a \`wsgw_\` gateway key
+- anything privileged lives in the api app and is reached over HTTP
+
+The manifest deliberately does not declare \`AI_GATEWAY_API_KEY\` for this type,
+which is what stops Workser seeding one. Do not add it.
+
+## The two processes
+
+| File | Runs where | May do |
+| --- | --- | --- |
+| \`electron/main.js\` | Node, on the machine | files, tray, windows, updates |
+| \`app/**\` | the renderer, sandboxed | ordinary web code, no Node |
+| \`electron/preload.js\` | the bridge | expose **named functions** only |
+
+\`contextIsolation: true\` and \`nodeIntegration: false\` are not defaults to tidy
+up — turning either off hands full filesystem and process access to page code.
+Add a capability by exporting one named function from preload, never by handing
+the renderer \`ipcRenderer\`.
+
+## Building and shipping
+
+\`\`\`bash
+npm run dev            # browser only, fastest loop
+npm run dev:desktop    # the same app inside a real Electron window
+npm run build          # static export -> out/
+npm run dist:desktop   # the installer -> release/
+\`\`\`
+
+In the app, **Publish → Your installer** does the same thing with a target
+picker, progress, and a download link at the end.
+
+## Signing — the owner's certificate, never Workser's
+
+An unsigned build runs perfectly on the machine that made it and tells every
+other machine the app is damaged (macOS) or trips SmartScreen (Windows). That
+is the failure an owner cannot diagnose, so say it before they send the file.
+
+\`electron-builder\` reads these from the environment; set them with
+\`workser env set --app <id>\`:
+
+| Platform | Keys |
+| --- | --- |
+| macOS | \`CSC_LINK\`, \`CSC_KEY_PASSWORD\` |
+| macOS notarize | \`APPLE_ID\`, \`APPLE_APP_SPECIFIC_PASSWORD\`, \`APPLE_TEAM_ID\` |
+| Windows | \`WIN_CSC_LINK\`, \`WIN_CSC_KEY_PASSWORD\` |
+
+A Mac app can only be built on a Mac — \`codesign\` and \`hdiutil\` are Apple's and
+have no substitute.
+
+## Auto-update
+
+Publishing uploads the installer **and** the update metadata
+(\`latest-mac.yml\` / \`latest.yml\`) beside it. \`electron-updater\` reads only that
+metadata, so an installer published alone gives you a download that works once
+and an app that can never update itself — and nobody notices until release two.
+Keep \`publish.url\` in \`electron-builder.yml\` pointed at the prefix the publish
+step reports back.
 `,
   },
   {
@@ -1511,6 +1637,35 @@ connect to it** — useful as a snapshot, useless as somewhere to run tests.
   is this database costing me while nothing is happening".
 - **Most apps never need the storage or functions half.** If the user just wants
   to store uploads, the default bucket in \`reference/storage.md\` is the answer.
+
+## Sign-in for the app you are building
+
+**WEB APPS ONLY.** Everything in this section is about the \`web\` app type. Neon's
+managed auth is consumed through a Next.js server route (\`/api/auth/*\`), so it
+does not reach a mobile app, and it does not reach a desktop app either — that
+type is a static export and cannot serve a route at all. For those two, auth
+belongs in the project's API service, self-hosted, where Google needs the owner's
+own credentials like anywhere else. Do not tell a phone-app owner that Google
+sign-in is free.
+
+**On a web app with Neon-managed auth, Google sign-in is already on.** Neon runs
+it on its own shared OAuth credentials — there is no client ID to create, no
+secret to set, no redirect URI to register. If the owner asks for "login with
+Google", build the button; do not send them to the Google Cloud Console.
+
+Check which mode the app is on before answering: \`workser env get AUTH_MODE\`.
+\`neon_managed\` means the above. Anything else (or absent) is self-hosted, where
+Google needs the owner's own \`GOOGLE_CLIENT_ID\`/\`GOOGLE_CLIENT_SECRET\` and a
+redirect URI per domain.
+
+Two caveats worth saying out loud rather than letting the owner find later:
+
+- **The consent screen says Neon, not their brand**, and the quota is shared.
+  Correct for a prototype, wrong once real users sign in. Moving to their own
+  Google client is done in the desktop app under **Cloud -> Auth -> Sign-in
+  providers**, which also shows the exact redirect URI to register.
+- **GitHub and Vercel have no shared credentials.** Those stay off until the
+  owner installs their own client in that same place.
 `,
   },
   {

@@ -22,6 +22,7 @@ screen long. Find your row, run that **one** command — every line costs you.
 | Follow the project's brand — colours, fonts, logo | `design …` | `workser help brand` |
 | Provision or query Postgres; list end users | `db …`, `auth …` | `workser help database` |
 | See the project's other apps, and wire one to another | `project …`, `env … --app` | `workser help apps` |
+| Build a desktop app, sign it, ship an installer | `deploy`, `env …` | `workser help desktop` |
 | Deploy, set env vars, read logs, check a domain | `deploy`, `env …`, `logs`, `versions`, `domain`, `open` | `workser help deploy` |
 | Save work before a risky change, undo it, sync this folder | `checkpoint`, `restore`, `sync` | `workser help version-control` |
 | Put files in the project's bucket | `storage …` | `workser help storage` |
