@@ -65,7 +65,10 @@ const TYPES = [
 const APP_TYPES = [
   "web",
   "mobile",
-  "desktop",
+  // NOT OFFERED AT FIRST LAUNCH (2026-09-05) — `desktop` is `creatable: false`
+  // in core-api, so the card would error on the owner's click. Re-enable
+  // together with that flag; grep the marker.
+  // "desktop",
   // `api` is the shorthand; the two concrete spellings pick the runtime and
   // are accepted at this boundary for an agent that knows which one it wants.
   "api",

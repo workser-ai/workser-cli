@@ -101,7 +101,7 @@ forever; if it does, carry on and state clearly what you assumed.
 ## Asking for an app that does not exist yet
 
 The project needs a kind of app it does not have — a backend for the phone app, a
-desktop build of the website. **You cannot create one yourself**, by design: apps
+phone version of the website. **You cannot create one yourself**, by design: apps
 are real infrastructure on the owner's account. Ask, and their click creates it.
 The answer gives you the new app's id.
 
@@ -116,14 +116,18 @@ workser ask "The phone app needs an API to hold its data. Add one?" \
 |---|---|
 | `web` | Next.js site on Workser hosting |
 | `mobile` | Expo / React Native phone app |
-| `desktop` | Next.js + Electron, installs on a Mac or PC |
 | `api` | backend service — `api-hono` (TypeScript) or `api-python` (FastAPI) |
 
 **Name the kind you actually mean.** Asking for `web` because you are unsure is
-how a desktop app gets created as a website: the card shows the owner the kind
+how a phone app gets created as a website: the card shows the owner the kind
 you named, they approve THAT, and the wrong app is provisioned under your own
 sentence asking for the right one. An unknown kind is refused with the list
 above rather than guessed at — read it and ask again.
+
+**There is no desktop app type.** Workser builds websites, phone apps and
+backend services. If the owner asks for a Mac or Windows app, say plainly that
+Workser cannot make one yet — do not offer a web app dressed as a window, and
+do not build a "desktop-style" page instead. That is not what they asked for.
 
 **Never ask for a secret value this way** — the answer is stored and displayed. Ask
 *where* a key should go, then have the user set it (`workser env set` writes it
