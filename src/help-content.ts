@@ -1331,6 +1331,7 @@ up front — most of the apps a goal will touch don't exist when it's proposed.
 workser image generate "<prompt>"            # alias: workser image gen
   -r, --reference <url...>                   # condition on existing images (up to 4)
   -o, --output <path>                        # also download the first image locally
+workser image usage                          # can I generate right now, and what would stop me
 \`\`\`
 
 Returns the generated image's public URL, so the usual move is to generate, then use
@@ -1353,6 +1354,32 @@ workser image gen "same van, from the side" -r https://… -o ./public/van.png -
   exist only as URLs.
 - **Placeholder art is not a deliverable.** Generating a hero image to unblock a
   layout is fine; shipping it as the user's brand asset without asking is not.
+
+## This is metered, and it can be refused
+
+Every image is billed to the organization's credit wallet, and each plan includes
+a monthly number of them. Three gates run server-side before anything is drawn —
+the plan tier, the monthly allowance, then the wallet — so a call can come back
+refused having spent nothing.
+
+\`\`\`bash
+workser image usage --json    # {"limit":10,"used":3,"remaining":7,
+                              #  "credits":{"available":41.2,"requiredPerImage":4.12,"sufficient":true},
+                              #  "canGenerate":true,"blockedBy":null}
+\`\`\`
+
+- **Check before a batch, not after.** Planning six images is a plan that needs
+  six times \`requiredPerImage\` in the wallet. \`workser image usage\` answers that
+  before any of them cost anything; \`blockedBy\` names which gate would stop you
+  (\`plan\`, \`quota\`, \`credits\`), and it exits non-zero when generation is blocked.
+- **A refusal is final, not a hiccup — do NOT retry it.** \`insufficient_credits\`
+  (HTTP 402) and \`image_quota_reached\` (403) come back as those exact codes in
+  \`--json\`, and the CLI exits 8 for both. Retrying cannot succeed and every
+  attempt is another paid call the owner did not ask for. Stop, and tell the
+  owner what to do: top up credits, or upgrade the plan.
+- **You cannot see their balance any other way**, so do not guess at it from how
+  many images you have already made — a refusal at image four of six leaves the
+  work half-done and looks like a bug.
 
 ## Understanding media you can't natively see or hear
 

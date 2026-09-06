@@ -1782,6 +1782,90 @@ describe("media commands", () => {
     expect(res.json.error.message).toContain("I can't draw that.");
   });
 
+  /**
+   * THE METER, from the caller's side.
+   *
+   * Generation spends the owner's money, so the two ways it can be refused —
+   * an empty wallet, a spent monthly allowance — have to arrive as something
+   * an agent can tell apart from a failed request. Both were a bare 400 with
+   * prose in it, which reads exactly like a transport error, and the one thing
+   * an agent does with a transport error is try again.
+   */
+  it("a 402 refusal keeps its code and exits 8, not 1", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/images/generate", {
+      status: 402,
+      body: {
+        error: {
+          code: "insufficient_credits",
+          type: "credit_error",
+          message:
+            "Not enough organization credits to generate an image. Needs about 4.12, available 0.30. Top up your credits and try again.",
+          required: 4.12,
+          available: 0.3,
+        },
+      },
+    });
+    const res = await cli(["image", "generate", "a logo", "--project", "p_1"]);
+    expect(res.code).toBe(8);
+    expect(res.json.error.code).toBe("insufficient_credits");
+    expect(res.json.error.message).toContain("Top up");
+  });
+
+  it("a spent monthly allowance is its own code, also exit 8", async () => {
+    stub.overrides.set("POST /v1/projects/p_1/images/generate", {
+      status: 403,
+      body: {
+        error: {
+          code: "image_quota_reached",
+          type: "plan_limit_error",
+          message:
+            "This organization has used all 10 image generations included in its plan this month.",
+          limit: 10,
+          used: 10,
+        },
+      },
+    });
+    const res = await cli(["image", "generate", "a logo", "--project", "p_1"]);
+    expect(res.code).toBe(8);
+    expect(res.json.error.code).toBe("image_quota_reached");
+  });
+
+  it("image usage → GET the usage route, exit 0 while it can generate", async () => {
+    stub.overrides.set("GET /v1/projects/p_1/images/usage", {
+      body: {
+        limit: 10,
+        used: 3,
+        remaining: 7,
+        credits: { available: 41.2, requiredPerImage: 4.12, sufficient: true },
+        canGenerate: true,
+        blockedBy: null,
+      },
+    });
+    const res = await cli(["image", "usage", "--project", "p_1"]);
+    expect(res.code).toBe(0);
+    expect(stub.lastRequest!.method).toBe("GET");
+    expect(stub.lastRequest!.path).toBe("/v1/projects/p_1/images/usage");
+    expect(res.json.data.canGenerate).toBe(true);
+  });
+
+  it("image usage exits 8 when the wallet cannot cover one image", async () => {
+    // The point of the command: this is knowable BEFORE a generate call spends
+    // anything, so `image usage && image generate` is a safe thing to write.
+    stub.overrides.set("GET /v1/projects/p_1/images/usage", {
+      body: {
+        limit: 10,
+        used: 3,
+        remaining: 7,
+        credits: { available: 0.3, requiredPerImage: 4.12, sufficient: false },
+        canGenerate: false,
+        blockedBy: "credits",
+      },
+    });
+    const res = await cli(["image", "usage", "--project", "p_1"]);
+    expect(res.code).toBe(8);
+    expect(res.json.data.blockedBy).toBe("credits");
+  });
+
   it("image understand → POST to the understand route", async () => {
     stub.overrides.set("POST /v1/projects/p_1/images/understand", {
       body: { answer: "A cat." },

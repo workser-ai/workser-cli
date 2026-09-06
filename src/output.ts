@@ -6,6 +6,19 @@ import { OWNER_ONLY_EXIT } from "./capabilities.js";
 export const OUT_OF_SCOPE_EXIT = 7;
 
 /**
+ * Exit code for "you cannot pay for this right now" — an empty credit wallet
+ * (`insufficient_credits`) or a plan allowance already spent for the month
+ * (`image_quota_reached`).
+ *
+ * Its own code, and not exit 1, for the same reason `out_of_scope` has one:
+ * a metered refusal is the one failure a retry makes strictly worse. Trying
+ * again cannot succeed, and each attempt is another paid call the owner did
+ * not authorise. The two codes stay distinguishable in `--json` (`error.code`)
+ * — the exit status only has to say "stop and tell the owner".
+ */
+export const BILLING_EXIT = 8;
+
+/**
  * Output is designed to be read by BOTH humans and AI agents.
  * - `--json` → a single stable line: {"ok":true,"data":...} / {"ok":false,"error":...}
  * - default  → terse, colorized human text
@@ -92,6 +105,20 @@ export function fail(err: unknown): never {
       process.stderr.write(pc.dim("  Approve the action in Workser Orbit, then retry.\n"));
     } else if (e.code === "owner_only") {
       process.stderr.write(pc.dim("  This is an owner action — do it in the Workser Orbit app.\n"));
+    } else if (e.code === "insufficient_credits") {
+      // Says "do not retry" out loud. An agent reading only the message would
+      // otherwise treat a 402 like any other failed call and try again.
+      process.stderr.write(
+        pc.dim(
+          "  The organization is out of AI credits. Top up in Workser Orbit (Billing) — retrying will not help.\n",
+        ),
+      );
+    } else if (e.code === "image_quota_reached") {
+      process.stderr.write(
+        pc.dim(
+          "  This month's plan allowance is spent. Upgrade the plan, or wait for the month to roll over — retrying will not help.\n",
+        ),
+      );
     }
   }
   process.exit(exitCodeFor(e));
@@ -105,5 +132,8 @@ function exitCodeFor(e: WorkserError): number {
   // Its own code so a script can tell "you asked for another organization"
   // apart from "the command failed" — the first is never fixed by retrying.
   if (e.code === "out_of_scope") return OUT_OF_SCOPE_EXIT;
+  if (e.code === "insufficient_credits" || e.code === "image_quota_reached") {
+    return BILLING_EXIT;
+  }
   return 1;
 }

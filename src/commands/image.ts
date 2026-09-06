@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { action } from "../run.js";
 import { api } from "../client.js";
 import { requireProject, type Context } from "../context.js";
-import { ok, line, success, info } from "../output.js";
+import { ok, line, success, info, warn, BILLING_EXIT } from "../output.js";
 import { WorkserError } from "../errors.js";
 import { resolveMediaSource } from "../media-source.js";
 
@@ -34,6 +34,16 @@ interface GeneratedImage {
   filename: string;
   publicUrl: string;
   format: string;
+}
+
+/** `GET images/usage` — the three gates `generate` applies, readable first. */
+interface ImageUsageStatus {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+  credits: { available: number; requiredPerImage: number; sufficient: boolean };
+  canGenerate: boolean;
+  blockedBy: "plan" | "quota" | "credits" | null;
 }
 
 interface GenerateResponse {
@@ -140,6 +150,61 @@ export function registerImage(program: Command): void {
           body: { source, query: args[0], task: opts.task },
         });
         ok(res, () => line(res?.answer ?? ""));
+      }),
+    );
+
+  /**
+   * `workser image usage` — can this project generate an image right now?
+   *
+   * The point is that it is askable BEFORE spending. `generate` is metered
+   * against the organization's credit wallet and a monthly plan allowance, and
+   * either can refuse a call; until this existed, the only way to find out was
+   * to try, and "try" is the expensive move. An agent planning eight hero
+   * images can now find out that the wallet covers two.
+   *
+   * Exits non-zero when generation is currently blocked, so `workser image
+   * usage --json && workser image generate …` is a safe thing to write.
+   */
+  image
+    .command("usage")
+    .description(
+      "Whether an image can be generated right now — monthly allowance, credit balance, and what would block it",
+    )
+    .action(
+      action(async ({ ctx }) => {
+        const projectId = requireProject(ctx as Context);
+        const status = await api<ImageUsageStatus>(
+          ctx as Context,
+          `/v1/projects/${projectId}/images/usage`,
+        );
+
+        ok(status, () => {
+          const monthly =
+            status.limit === null
+              ? "no monthly limit on this plan"
+              : `${status.used} of ${status.limit} used this month, ${status.remaining} left`;
+          line(`This month:  ${monthly}`);
+          line(
+            `Credits:     ${status.credits.available.toFixed(2)} available, ` +
+              `about ${status.credits.requiredPerImage.toFixed(2)} per image`,
+          );
+          if (status.canGenerate) {
+            success("Can generate now");
+          } else {
+            // Named, not just refused: each of the three has a different way
+            // out, and "blocked" alone sends the caller looking for the wrong
+            // one.
+            warn(
+              status.blockedBy === "credits"
+                ? "Blocked: not enough organization credits. Top up in Workser Orbit (Billing)."
+                : status.blockedBy === "quota"
+                  ? "Blocked: this month's plan allowance is spent. Upgrade, or wait for the month to roll over."
+                  : "Blocked: this plan cannot generate images. Upgrade to Spark or higher.",
+            );
+          }
+        });
+
+        if (!status.canGenerate) process.exitCode = BILLING_EXIT;
       }),
     );
 }
