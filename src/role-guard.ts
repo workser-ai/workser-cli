@@ -1,165 +1,84 @@
 import { WorkserError } from "./errors.js";
 
 /**
- * What the agent running this command is allowed to do.
+ * What a dispatched agent may run.
  *
- * Orbit sets `WORKSER_ROLE` on a dispatched subagent's process. The desktop
- * decides the policy (`role-capabilities.ts`); this file is the half that can
- * actually stop something, because it sits between the agent and the API.
+ * ─── WHAT THIS USED TO BE, AND WHY IT ISN'T ANY MORE ────────────────────────
  *
- * WHY IT IS HERE AND NOT ONLY IN THE PROMPT. "You are the QA reviewer, do not
- * edit the code" is a request. An agent that has just found the bug it was
- * asked to look for will fix it — helpfully, and then report that the check
- * passed, against code the owner has not seen. The refusal has to come from
- * something the agent cannot talk its way past.
+ * This file held a per-role allowlist of CLI verbs: `qa` and `security` and
+ * `analyst` could read, the builders could build, and anything outside your
+ * role's list was refused with "The architect role can't run `workser goal`."
  *
- * The list mirrors `role-capabilities.ts` in the desktop rather than importing
- * it: this CLI has no build-time dependency on the app's source (same reasoning
- * `board.ts` and `ask.ts` give for their own literal lists). If one changes,
- * change both — the failure mode is a role that can run one verb too many, so
- * it is worth the duplication being visible.
+ * The intent was sound and the result was not. Three things went wrong, and
+ * the third is the one that decided it:
  *
- * NO ROLE MEANS NO LIMIT. The CLI is also run by hand and from the manager's
- * own turn, and neither of those is a subagent; an absent variable must not
- * mean "deny everything" or the whole CLI stops working outside a dispatch.
+ *   IT GUESSED WHO WOULD NEED WHAT. The plan is written by a manager agent at
+ *   runtime; nothing decides in advance which role will end up needing to read
+ *   the board, list artifacts, or check a goal. Every guess this list made was
+ *   wrong for somebody, and the list grew by one verb each time somebody hit
+ *   it — `requirement`, `artifact`, `note`, `scan`, `health`, `usage`,
+ *   `deployments` were all added exactly that way, each after a real agent was
+ *   blocked doing its actual job.
+ *
+ *   IT FOUGHT THE PROMPT. Every role's preamble tells it to run `workser
+ *   artifact list` before non-trivial work. Five roles were then refused that
+ *   verb here, so the agent spent its run trying to obey an instruction this
+ *   file would not let it obey.
+ *
+ *   AND IT LOOKED LIKE A BROKEN PRODUCT. A refusal is a non-zero exit with an
+ *   error string, and it renders in the owner's thread as a failed step in red
+ *   — indistinguishable from a real fault. The owner sees their software
+ *   erroring at itself. That cost is paid by the person who bought the
+ *   product, for a rule that only ever protected us from an agent reading
+ *   something.
+ *
+ * ─── WHAT REPLACES IT: SCOPE IS TAUGHT, DANGER IS GATED ─────────────────────
+ *
+ * A role is a job description, not a permission boundary, and it is delivered
+ * where job descriptions belong — in the agent's briefing (`agent-docs.ts` and
+ * the role preamble). "You are the tester; report what you find rather than
+ * fixing it" is guidance the agent follows because it is told the scope
+ * clearly, and being occasionally wrong about it costs a message, not a step.
+ *
+ * THE ACTIONS THAT CAN ACTUALLY HURT SOMEBODY ARE NOT GUARDED HERE AND NEVER
+ * WERE. They are gated in the daemon, by OPERATION rather than by verb name,
+ * on the one path every CLI call travels — see `orbit/daemon/approval.ts`:
+ *
+ *   `GATED_ACTIONS` (19 of them) raises an approval card the owner answers:
+ *   deploy.prod, env.get, db.delete, db.query.destructive, db.connectionString,
+ *   domain.set, payment.live, key.rotate, neon.bucket.delete, and the rest.
+ *
+ *   `NEVER_AUTO` — deploy.prod, payment.live, db.delete, neon.bucket.delete —
+ *   cannot be opened even by "just do it" autonomy.
+ *
+ * That gate is strictly stronger than this file ever was: it cannot be evaded
+ * by a differently-named verb, and it asks the owner rather than guessing on
+ * their behalf. What an agent may WRITE is likewise unchanged — that is its
+ * filesystem mode (`role-capabilities.ts`), applied to the process itself.
+ *
+ * ─── WHAT IS STILL REFUSED HERE ─────────────────────────────────────────────
+ *
+ * Exactly one thing, and it is not about roles: approving a plan. That is the
+ * owner's single decision in this product, and an agent that can approve the
+ * plan it just wrote has removed the only gate the whole design rests on.
+ *
+ * NO ROLE MEANS NO LIMIT, still. The CLI is also run by hand and from the
+ * manager's own turn, and neither is a dispatched subagent.
  */
-const READS = [
-  // `requirement` sits beside `doc` and `decision` because it is the same kind
-  // of thing and was simply forgotten: the verb shipped, no role could run it,
-  // and on 2026-08-23 a channel PM reported to the owner that "requirements are
-  // not readable by this PM role" — which was exactly true, for every role.
-  "task", "board", "doc", "decision", "requirement", "memory", "search", "verify", "logs",
-  "status", "help", "whoami", "login", "auth", "project", "open", "doctor",
-  // Both READ and report. `scan` reads files and shells out to npm; `health`
-  // makes a GET request to an address that is already public. Neither can
-  // change anything, which is why the roles that exist to look — qa, security,
-  // sre, analyst — get them without getting anything else.
-  "scan", "health",
-  // Read-only views of what is running. Added with Phase 6a: an SRE that can
-  // read logs but cannot list deployments or read the app's address is being
-  // asked to diagnose an outage with one eye shut.
-  "urls", "deployments",
-  // Reading the plan and what is used against it. An agent proposing "add
-  // another project" can only sensibly propose it if it can find out the plan
-  // allows two and two already exist.
-  "usage",
-  // RECORDING WHAT YOU PRODUCED IS NOT CHANGING THE PROJECT.
-  // Every dispatched role is told, in its own preamble, to run `workser
-  // artifact list` before non-trivial work and `workser artifact add` when it
-  // finishes something the owner should get. Five roles — pm, qa, security,
-  // analyst, sre — were then refused the verb here, so the instruction and the
-  // guard contradicted each other: the agent kept trying to obey an order this
-  // file would not let it obey, and burned its run doing it. It belongs beside
-  // `doc`, `decision` and `board`, which are already in this list and also
-  // have `create` subcommands — these write the project's RECORD, not the
-  // project. What stops a reviewer editing code is its filesystem mode, and
-  // that is untouched.
-  "artifact",
-  // LEAVING A FACT FOR THE TEAM IS NOT CHANGING THE PROJECT — the same
-  // argument as `artifact` directly above, and it belongs in READS rather than
-  // BUILDS on purpose. The roles that DISCOVER things are the reading ones: a
-  // tester that found the real cause, an analyst that found the actual column
-  // name, a security engineer that found where a key is read from. A shared
-  // memory only builders could write to would be missing most of what is worth
-  // sharing. See the daemon's `team-memory.ts`.
-  "note",
-];
 
-const BUILDS = [
-  ...READS, "app", "env", "db", "storage", "checkpoint", "image",
-  "design", "ask", "sync", "tool", "workflow", "neon", "business",
-];
-
-const ROLE_VERBS: Record<string, string[]> = {
-  pm: [...READS, "ask", "app"],  // `note` reaches this via READS.
-  architect: [...BUILDS, "versions"],
-  web: BUILDS,
-  api: BUILDS,
-  mobile: BUILDS,
-  python: BUILDS,
-  automation: BUILDS,
-  designer: BUILDS,
-  qa: READS,
-  security: READS,
-  analyst: READS,
-  sre: [...READS, "deploy", "domain", "versions"],
-  devops: [...BUILDS, "deploy", "domain", "versions"],
-  // NOTE: `deployments` reaches READS above, so every role can LIST and
-  // INSPECT. That is correct — history is a read. The two verbs that change
-  // production (`promote`, `rollback`) are not gated here at all, and must not
-  // be: they are gated in the DAEMON, as `deploy.prod`, which is a door "just
-  // do it" cannot open. A second, verb-name-based rule here would be a weaker
-  // copy of a control that already works.
-};
-
-/** Verbs no subagent may run, whatever its role. */
+/** Refused for every agent, whatever its role — see the note above. */
 const NEVER: Record<string, string> = {
-  // Approving is the owner's, full stop. An agent that can approve the plan it
-  // proposed has removed the only gate this product has.
   "task approval": "Only the owner can approve a plan.",
 };
 
-/**
- * READING IS NEVER REFUSED.
- *
- * The verb gate is coarse — it allows or denies `design`, `app`, `db` whole —
- * and that is right for the verbs whose subcommands all change something. It
- * is wrong for the ones where a single `show`/`list` sits beside four writes:
- * a manager asked to write a brief was refused `workser design show`, which
- * reads the project's own brand and changes nothing. The refusal then told it
- * to "report what you found instead", which it could not, because it had been
- * stopped from finding it.
- *
- * A role that cannot see the project cannot report on it, and every role in
- * this product exists to report on something. So these pairs are allowed to
- * everyone, whatever the verb list says.
- *
- * EVERY ENTRY IS A PURE READ, checked against the CLI's own commands. Nothing
- * here creates, updates, deletes, runs or spends:
- *
- *   - `db query` is NOT here. It takes arbitrary SQL, and `DELETE FROM` is a
- *     query. The verb gate is the only honest answer for it.
- *   - `tool run`, `app run`, `workflow run`, `artifact run` are not here for
- *     the same reason: "run" is the write.
- *   - `env get`/`env list` are not here either. They read, but what they read
- *     is credentials, and "can look at everything" was never meant to mean
- *     "can look at the keys".
- */
-const READ_PAIRS = new Set([
-  // The project's own brand and design notes.
-  "design show",
-  // What exists, and what it is wired to.
-  "app list",
-  "app tools",
-  // Shape, never contents-by-arbitrary-SQL.
-  "db list",
-  "db tables",
-  "db schema",
-  // What is stored, not what is in it.
-  "storage list",
-  "storage ls",
-  "checkpoint list",
-  "workflow list",
-  "workflow get",
-  "workflow runs",
-  "workflow nodes",
-  "tool list",
-  // The business data an analyst exists to read.
-  "business resources",
-  "business list",
-  "business get",
-  // The database service's own inventory.
-  "neon status",
-  "neon list",
-]);
-
 export function assertRoleMayRun(argv: string[]): void {
+  // Still keyed on being a dispatched agent at all: a person at a terminal is
+  // the owner, and the owner may approve their own plan.
   const role = (process.env.WORKSER_ROLE ?? "").trim();
   if (!role) return;
 
   const commandArgv = stripLeadingGlobalOptions(argv);
-  const verb = commandArgv[0];
-  if (!verb) return;
+  if (!commandArgv[0]) return;
 
   const pair = `${commandArgv[0]} ${commandArgv[1] ?? ""}`.trim();
   // `approval request` only READS — it tells the owner the plan is ready. The
@@ -172,21 +91,6 @@ export function assertRoleMayRun(argv: string[]): void {
     )
   ) {
     throw new WorkserError(NEVER[pair], { code: "role_forbidden" });
-  }
-
-  // A read is a read, whatever the role — see `READ_PAIRS`.
-  if (READ_PAIRS.has(pair)) return;
-
-  const allowed = ROLE_VERBS[role];
-  // An unknown role reads and nothing else: the safe failure for a typo in a
-  // role name is a subagent that can look but not act.
-  const list = allowed ?? READS;
-  if (!list.includes(verb)) {
-    throw new WorkserError(
-      `The ${role} role can't run \`workser ${verb}\`. ` +
-        `Report what you found instead, and the step that owns this will do it.`,
-      { code: "role_forbidden" },
-    );
   }
 }
 

@@ -1707,14 +1707,17 @@ the same way when the task touches documented behaviour.
 \`--infra\` match on the server, so the answer covers the whole project rather
 than the first page of it. \`decision tag <id>\` files one that already exists.
 
-## Work with phases → subtasks + a plan doc, before you build
+## Work with one task's steps → subtasks + a plan doc, before you build
 
-The moment you split a task into more than one phase, file it — not afterwards,
-and not only in your reply, which is gone once the conversation scrolls.
+Do not confuse two levels of planning. A **goal phase** is an owner-visible
+delivery across tasks; create it with \`workser goal create\` and wait for agreement
+before filing work. A **subtask** is one teammate's implementation step inside a
+single approved task. File those steps before building — not afterwards, and not
+only in your reply, which is gone once the conversation scrolls.
 
 \`\`\`bash
-# the phases — this task's own subtask list, not the Board
-workser task subtask add "Phase 1 — schema + migration" --role api --note "…"
+# the implementation steps — this task's own subtask list, not the Board
+workser task subtask add "Create schema + migration" --role api --note "…"
 
 # the plan's narrative, ONE doc, deliberately NOT linked to a subtask
 workser doc create "Checkout — plan" --kind plan --markdown "$(cat plan.md)" --json
@@ -1734,9 +1737,9 @@ Never tell the user a subtask is locked, and never file a second one alongside
 the wrong one — a plan with a duplicate phase in it is a plan nobody can read
 the progress of.
 
-**Don't pass \`--work-item\` for a multi-phase plan.** A linked document renders on
-its card and is *hidden* from the Docs panel; a plan spanning three phases
-belongs to the project, not to phase 1.
+**Don't pass \`--work-item\` for a goal-wide plan.** A linked document renders on
+its card and is *hidden* from the Docs panel; a plan spanning several goal phases
+belongs to the project, not to the first task.
 
 The bar: if the user closed this conversation now, the subtask list should still
 show what's left and the doc should still explain the plan to whoever continues

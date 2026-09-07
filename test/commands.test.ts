@@ -847,6 +847,37 @@ describe("project-channel PM task intake", () => {
     });
   });
 
+  it("lets any role run any verb — scope is taught, danger is gated", async () => {
+    /**
+     * THE REGRESSION THIS GUARDS.
+     *
+     * `role-guard.ts` used to hold a per-role allowlist of verbs, so an
+     * `architect` running `workser goal list` got "The architect role can't
+     * run `workser goal`" — a non-zero exit that renders in the owner's own
+     * thread as a failed step in red, indistinguishable from a real fault.
+     * The list could not know in advance which role would need which verb,
+     * and it grew by one entry every time a real agent was blocked doing its
+     * actual job.
+     *
+     * What can actually hurt somebody is gated in the daemon by OPERATION
+     * (`approval.ts`'s `GATED_ACTIONS` / `NEVER_AUTO`), which no verb name
+     * can slip past. This asserts the CLI itself no longer refuses on role.
+     */
+    const r = await cli(["board", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "architect" },
+    });
+    expect(r.json?.error?.code).not.toBe("role_forbidden");
+  });
+
+  it("a reading role may now run a writing verb, and the daemon decides", async () => {
+    // `qa` was READS-only. Whether this particular call is allowed is the
+    // daemon's approval gate to answer, not a verb-name check in the CLI.
+    const r = await cli(["app", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "qa" },
+    });
+    expect(r.json?.error?.code).not.toBe("role_forbidden");
+  });
+
   it("still prevents a PM from approving its own task with global flags first", async () => {
     const before = stub.requests.length;
     const r = await cli(

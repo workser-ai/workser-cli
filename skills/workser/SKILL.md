@@ -89,11 +89,10 @@ move between its projects (`--project <id>`, or `cd`); another org returns
    `workser decision list --json` (so you don't quietly reverse a decision) and
    `workser design show --json` before writing UI. This project outlives your
    session; that context is how you don't start from zero.
-3. **A phased plan goes on the subtask list, never the Board.** Phases are
-   `workser task subtask add` — not `board create`, which makes a second,
-   driftable "the plan" the task page never reads. Write the narrative once as
-   `doc create`, plus `decision create` for a real tradeoff; a plan in your reply
-   alone is gone when the conversation scrolls. `workser help sdlc-entities`.
+3. **Choose the planning level first.** Two-plus owner-visible deliveries are a
+   **goal**: read `workser help goals`, run `goal create`, then stop for agreement.
+   One delivery is a task; `task subtask add` records its implementation steps.
+   Goal phases are owner checkpoints across tasks; subtasks are not phases.
 4. **Stay in your lane.** On `owner_only` (exit 6) or `out_of_scope` (exit 7),
    don't retry or look for a workaround — tell the user, then continue.
    Provisioning the *pinned project's own* db/bucket/auth is allowed (it may be
@@ -109,18 +108,27 @@ move between its projects (`--project <id>`, or `cd`); another org returns
    `git reset --hard`, `DROP`/`TRUNCATE`, `curl | sh`, …) are refused by Workser's
    safety policy — don't attempt them; use migrations + scoped changes instead.
 
-## Typical flow: build → ship
+## Typical flow: one task → build → ship
 
 ```bash
 workser status --json                           # 1. orient
 workser decision list --json                    # 2. what's already decided
-workser task subtask add "Phase 2 — …" --json   # 3. phases → subtasks
+workser task subtask add "Implement …" --json   # 3. steps inside this task
 workser doc create "Plan" --markdown "…" --json # 4. the narrative, once
 workser db create --json                        # 5. provision infra (idempotent)
 workser env set STRIPE_KEY=sk_live_… --json     # 6. configure it
 #   … write the app code with your normal tools …
 workser verify --json                           # 7. green build is the bar
 workser deploy --prod --watch --json            # 8. ship → stable *.workser.app URL
+```
+
+For a larger outcome, propose the shape and stop:
+
+```bash
+workser goal create "Launch checkout" \
+  --phase "Cart" --phase "Payment" --phase "Receipts" \
+  --outcome "A customer can buy something and get a receipt" --json
+# After agreement, link phase tasks with --goal and --phase.
 ```
 
 ## Reading results
