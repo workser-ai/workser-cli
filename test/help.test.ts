@@ -17,6 +17,36 @@ import { runCli } from "./run-cli.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+/**
+ * How long a guide may be before it stops being one sitting's reading.
+ *
+ * Not a style rule. A topic is loaded whole into an agent's context the moment
+ * it asks for it, so a guide that sprawls is paid for on every call — and a
+ * reader that skims a wall of text is the reason a documented flag still gets
+ * guessed at.
+ */
+const GUIDE_LIMIT = 6144;
+
+/**
+ * The guides allowed past it, and why — never a blanket raise.
+ *
+ * Lifting `GUIDE_LIMIT` for everybody is the tempting fix and the wrong one:
+ * it buys one guide its exception by giving twenty-six others room to sprawl
+ * unnoticed, which is the drift this file exists to catch. An entry here is a
+ * deliberate, argued exception; the ceiling for everything else does not move.
+ *
+ * `agent-cloud` is one topic because it is one decision. Splitting it is not a
+ * formatting change — it means an agent that reads "how to create an agent"
+ * without reading "publish or nothing takes effect", "this needs a paid plan",
+ * or "propose Agent Cloud before the four fallbacks". Those are the parts that
+ * are load-bearing, and they are the parts a second file gets read without.
+ * The media half was already split out (`agent-cloud-media.md`), which is the
+ * one cut that could be made without breaking the decision in half.
+ */
+const LONG_GUIDES: Record<string, number> = {
+  "skills/workser/reference/agent-cloud.md": 9216,
+};
+
 /** Top-level command names, read from the CLI's own `--help`. */
 function registeredCommands(): string[] {
   const help = execFileSync(process.execPath, [join(ROOT, "dist", "index.js"), "--help"], {
@@ -112,7 +142,8 @@ describe("workser help", () => {
 
   it("each guide stays readable in one go", () => {
     for (const topic of HELP_TOPICS) {
-      expect(topic.body.length, `${topic.source} is too long — split it`).toBeLessThan(6144);
+      const limit = LONG_GUIDES[topic.source] ?? GUIDE_LIMIT;
+      expect(topic.body.length, `${topic.source} is too long — split it`).toBeLessThan(limit);
       expect(topic.body.trim().length, `${topic.source} is empty`).toBeGreaterThan(200);
     }
   });
