@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { api } from "../client.js";
+import { requireProject } from "../context.js";
 import { ok, line, warn } from "../output.js";
 
 /**
@@ -44,8 +45,16 @@ import { ok, line, warn } from "../output.js";
  *                     | subagents | workflows
  *   PATCH  /v1/agent-cloud/:id                 brief, model, capabilities
  *   POST   /v1/agent-cloud/:id/publish         put the setup live
+ *   POST   /v1/agent-cloud/:id/rollback        go back to an earlier version
+ *   GET    /v1/agent-cloud/:id/versions        what has been published, when
  *   POST   /v1/agent-cloud/:id/test-runs       try it without publishing
  *   GET    /v1/agent-cloud/catalog/models/live | /capabilities | /machines
+ *
+ * ...and the MACHINE the agent runs on, which is a folder on this computer
+ * rather than a row upstream:
+ *
+ *   GET    /v1/app-folders/agent?projectId=&agentId=   where it is (prepares it)
+ *   POST   /v1/projects/:id/git/pull { cwd, agentId }  bring it down
  *
  * WHY THE AGENT NEEDS ALL OF IT, not just create-and-run. A coding agent asked
  * to "build me an order desk" cannot stop at an empty agent with a sentence of
@@ -420,6 +429,122 @@ export function registerAgentCloud(program: Command): void {
                 pc.bold(`workser agent-cloud runs ${res.run_id}`),
             );
           }
+        });
+      }),
+    );
+
+
+  /**
+   * WHAT HAS BEEN PUT LIVE, and when.
+   *
+   * The counterpart to `publish`: that command says a version exists, this one
+   * is the only way to find out WHICH — and it is what makes `rollback` usable,
+   * since rolling back to a number nobody can read is guesswork.
+   */
+  cloud
+    .command("versions <agentId>")
+    .description("Every published version of this agent, newest first")
+    .action(
+      action(async ({ ctx, args }) => {
+        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/versions`);
+        const rows = Array.isArray(res) ? res : (res?.versions ?? []);
+        ok(rows, () => {
+          if (!rows.length) {
+            return line(
+              pc.dim("Never published. Nothing this agent does is live yet — ") +
+                pc.bold(`workser agent-cloud publish ${args[0]}`),
+            );
+          }
+          for (const v of rows) {
+            const when = v.published_at ?? v.created_at ?? "";
+            line(
+              `${pc.bold(`v${v.version ?? v.id}`)}  ${pc.dim(String(when).slice(0, 19).replace("T", " "))}` +
+                (v.is_current || v.current ? pc.green("  ← live") : ""),
+            );
+            if (v.changelog) line("  " + pc.dim(v.changelog));
+          }
+        });
+      }),
+    );
+
+  /**
+   * BACK TO A VERSION THAT WORKED.
+   *
+   * `publish` has no undo of its own, and the runtime serves whatever is
+   * current — so a bad setup published at 2am stays live until this runs. It
+   * takes the version NUMBER rather than "the last one" deliberately: "undo"
+   * pressed twice in a panic is how you land somewhere nobody chose.
+   */
+  cloud
+    .command("rollback <agentId> <version>")
+    .description("Make an earlier published version live again")
+    .action(
+      action(async ({ ctx, args }) => {
+        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/rollback`, {
+          method: "POST",
+          body: { version: Number(args[1]) },
+        });
+        ok(res, () => line(pc.green(`Rolled back to version ${args[1]}.`)));
+      }),
+    );
+
+  /**
+   * THE MACHINE THIS AGENT RUNS ON, as a folder you can edit.
+   *
+   * ─── WHY THIS COMMAND HAD TO EXIST ────────────────────────────────────────
+   *
+   * Everything else in this file configures the agent through the API. The
+   * machine is different: it is a Dockerfile and scripts in a repo, and the
+   * only surface that could reach it was the desktop console's Files tab. So
+   * an agent working in a terminal could give a cloud agent skills, tools,
+   * secrets and subagents, publish it — and had no way to change what it runs
+   * ON. That is the same gap this file's header argues against, left open in
+   * the one place it is hardest to notice.
+   *
+   * Asking where it is PREPARES it, which is the daemon's own behaviour and
+   * the right one: a caller asking for the path is about to work in it.
+   * `--pull` then brings the repo down, because a prepared folder is empty
+   * until something clones into it.
+   */
+  cloud
+    .command("workspace <agentId>")
+    .description("Where this agent's Dockerfile and scripts live on this computer")
+    .option("--pull", "Fetch the repo into it (needed once, before the first edit)")
+    .option("--name <name>", "The agent's name, for a readable folder")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const projectId = requireProject(ctx);
+        const agentId = args[0];
+        const folder = await api(ctx, "/v1/app-folders/agent", {
+          query: { projectId, agentId, agentName: opts.name },
+        });
+
+        if (!opts.pull) {
+          ok(folder, () => {
+            line(folder.path);
+            // The empty state is the actionable one, and it is silent
+            // otherwise: an empty folder looks like an agent with no
+            // Dockerfile rather than one that has never been fetched.
+            if (folder.empty) {
+              line(
+                pc.dim("Nothing in it yet — ") +
+                  pc.bold(`workser agent-cloud workspace ${agentId} --pull`),
+              );
+            }
+          });
+          return;
+        }
+
+        // `agentId`, never `webAppId`. The app parameter falls back to the
+        // project's primary app when it does not resolve, so sending an agent
+        // id there would pull the project's WEBSITE into this folder.
+        const pulled = await api(ctx, `/v1/projects/${projectId}/git/pull`, {
+          method: "POST",
+          body: { cwd: folder.path, agentId },
+        });
+        ok({ ...folder, pulled }, () => {
+          line(pc.green("Fetched."));
+          line(folder.path);
         });
       }),
     );
