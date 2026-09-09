@@ -24,7 +24,7 @@ screen long. Find your row, run that **one** command — every line costs you.
 | See the project's other apps, and wire one to another | `project …`, `env … --app` | `workser help apps` |
 | Deploy, set env vars, read logs, check a domain | `deploy`, `env …`, `logs`, `versions`, `domain`, `open` | `workser help deploy` |
 | Save work before a risky change, undo it, sync this folder | `checkpoint`, `restore`, `sync` | `workser help version-control` |
-| Put files in the project's bucket | `storage …` | `workser help storage` |
+| Store an image, PDF or upload — **never in the app folder** | `storage …` | `workser help storage` |
 | Read or write products, orders, customers, deals | `business …` | `workser help business` |
 | Use the project's own Neon buckets or functions | `neon …` | `workser help neon` |
 | Build an automation, or use Gmail/Slack/Stripe/Sheets | `workflow …`, `app …` | `workser help automation` |
@@ -60,12 +60,8 @@ starts lower: a developer wanting their own agent code, knowing this exists.
 ```
 workser status         # connection + pinned project + latest deploy
 workser whoami         # who am I / which workspace
-workser project show   # the project pinned here
-workser project list   # your organization's projects
 workser verify         # typecheck/lint/build — gate "done" on this
 workser doctor         # endpoint, mode, token presence, project
-workser login          # authenticate outside Orbit (CI)
-workser logout         # clear a saved standalone session
 ```
 
 ## Scope
@@ -107,7 +103,13 @@ move between its projects (`--project <id>`, or `cd`); another org returns
 7. **Verify before "done".** Run `workser verify --json` (typecheck/lint/build).
    On `"ok": false`, fix what it lists and re-run until it passes — a green build
    is the bar, not your own judgement.
-8. **Destructive shell actions are blocked.** Irreversible commands (`rm -rf /`,
+8. **The project's own infra is the default — db, bucket, auth.** Don't reach
+   past it for one you know better; the owner may name another provider and that
+   is theirs to decide, so ask rather than drift. Media always goes to storage
+   (`workser storage put`, then the URL) and never into `public/`: files there
+   are committed, ride in every deploy bundle (25MB cap), and can't change
+   without a redeploy. A logo or icon is the exception; content is not.
+9. **Destructive shell actions are blocked.** Irreversible commands (`rm -rf /`,
    `git reset --hard`, `DROP`/`TRUNCATE`, `curl | sh`, …) are refused by Workser's
    safety policy — don't attempt them; use migrations + scoped changes instead.
 
@@ -123,15 +125,6 @@ workser env set STRIPE_KEY=sk_live_… --json     # 6. configure it
 #   … write the app code with your normal tools …
 workser verify --json                           # 7. green build is the bar
 workser deploy --prod --watch --json            # 8. ship → stable *.workser.app URL
-```
-
-For a larger outcome, propose the shape and stop:
-
-```bash
-workser goal create "Launch checkout" \
-  --phase "Cart" --phase "Payment" --phase "Receipts" \
-  --outcome "A customer can buy something and get a receipt" --json
-# After agreement, link phase tasks with --goal and --phase.
 ```
 
 ## Reading results

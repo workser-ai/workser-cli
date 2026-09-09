@@ -19,7 +19,8 @@ that URL directly in the app.
 
 ```bash
 workser image generate "flat illustration of a farm delivery van, brand colors" --json
-workser image gen "same van, from the side" -r https://… -o ./public/van.png --json
+workser image gen "same van, from the side" -r https://… --json     # use .data.url
+workser image gen "van, rear view" -o /tmp/van.png --json           # only if you must
 ```
 
 ## Notes that matter (generation)
@@ -30,6 +31,16 @@ workser image gen "same van, from the side" -r https://… -o ./public/van.png -
   question comes back as text rather than an image. Check that you actually got an
   image before wiring the URL into a page; an empty result is not a transport error
   to retry.
+- **The URL is the deliverable — don't download it into the app folder.** This
+  example used to write to `./public/van.png`, which is the single most common way
+  generated art ends up committed to the user's repository: in every deploy bundle
+  for ever, unreplaceable without a redeploy, against a 25MB publish cap. The
+  returned URL is already public and already served. Reference it.
+
+  When a file genuinely has to exist — an asset the build reads, something to hand
+  the user — `-o` into a temp path and `workser storage put` it into the bucket
+  (or whatever store the owner chose; the repo is never it). See
+  `reference/storage.md`.
 - **`--output` writes only the first image.** If you asked for several, the rest
   exist only as URLs.
 - **Placeholder art is not a deliverable.** Generating a hero image to unblock a
