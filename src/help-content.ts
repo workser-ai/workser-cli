@@ -196,26 +196,28 @@ publishes an agent that never answers anybody. Pictures, video, voice and
 transcription are abilities, not models you set, and one call from the app's
 own code needs no agent at all: \`workser help agent-cloud-media\`.
 
-## Agents need a paid plan — the trial does not include them
+## Every plan can use Agent Cloud — runs use credits
 
-\`create\` and \`run\` both refuse with **402** on a free or trialling
-organisation. That is a rule, not a fault: every run buys model tokens and
-holds a machine, so it costs real money the moment it happens.
+Creating, teaching and publishing an agent are available on free, trial and paid
+plans. A \`try\` or live \`run\` spends real money on model usage and hosted runtime,
+so it starts only when the organisation's shared AI-credit wallet clears the
+minimum balance shown in the refusal.
 
-**When you hit it, hand the plan over — do not just describe it.** Workser
+**When you hit a 402, hand the credit top-up over — do not just describe it.** Workser
 files the refusal on the conversation as a clickable step and artifact, so the
-person gets something actionable. Say what you were doing, that agents need a
-plan, and stop.
+person gets something actionable. Say what you were doing, that the wallet needs
+credits, and stop. The same rule applies when the owner supplies their own model
+key because the hosted runtime and fallback path still cost money.
 
 Do NOT:
 
-- retry the call, or try a different agent — the answer is the same
+- retry the call, or try a different agent — the wallet is shared
 - try to work around it by running the job yourself as a coding agent; that is
   a different product and it will not be there when the user closes the window
-- guess at prices, discounts or trial extensions
+- guess at prices, discounts or free usage
 
 If the user asks how much: it is per minute of run time plus the model, and the
-plan page has the current figures. You do not have them.
+Agent Cloud usage view has the current figures. You do not have them.
 
 ## When to reach for this
 
@@ -236,7 +238,7 @@ workflow\`.
 ## If Agent Cloud is ruled out, there is an order
 
 Propose Agent Cloud first, every time. If it genuinely does not fit — the owner
-has said no to the plan, or wants their own code in their own framework — go
+does not want a managed runtime, or wants their own code in their own framework — go
 down this list in order, and say which rung you took and why you skipped the
 ones above it:
 
@@ -291,9 +293,10 @@ watching sees the agent think. See the \`workser-sdk\` skill, \`reference/agents
    what to do, what to leave alone, when to ask. Vague instructions are the
    single biggest cause of an agent that "doesn't work".
 
-3. **Free plans cannot run agents at all**, and a trial has a small allowance.
-   A \`402\` with \`spend_limit_reached\` is not a bug — tell the user what it says
-   and point them at their plan.
+3. **Every plan can run agents once the shared wallet has enough credits.** A
+   \`402\` with \`spend_limit_reached\` means the wallet needs a top-up (or the owner
+   reached their own spend cap). Tell them exactly what it says and hand over
+   the credit action; never suggest a subscription upgrade for this refusal.
 
 4. **Say who it is for.** An agent acting for one of the app's customers needs
    \`referenceUserId\`, or its memory and audit trail belong to nobody.
@@ -1384,7 +1387,8 @@ that URL directly in the app.
 
 \`\`\`bash
 workser image generate "flat illustration of a farm delivery van, brand colors" --json
-workser image gen "same van, from the side" -r https://… -o ./public/van.png --json
+workser image gen "same van, from the side" -r https://… --json     # use .data.url
+workser image gen "van, rear view" -o /tmp/van.png --json           # only if you must
 \`\`\`
 
 ## Notes that matter (generation)
@@ -1395,6 +1399,16 @@ workser image gen "same van, from the side" -r https://… -o ./public/van.png -
   question comes back as text rather than an image. Check that you actually got an
   image before wiring the URL into a page; an empty result is not a transport error
   to retry.
+- **The URL is the deliverable — don't download it into the app folder.** This
+  example used to write to \`./public/van.png\`, which is the single most common way
+  generated art ends up committed to the user's repository: in every deploy bundle
+  for ever, unreplaceable without a redeploy, against a 25MB publish cap. The
+  returned URL is already public and already served. Reference it.
+
+  When a file genuinely has to exist — an asset the build reads, something to hand
+  the user — \`-o\` into a temp path and \`workser storage put\` it into the bucket
+  (or whatever store the owner chose; the repo is never it). See
+  \`reference/storage.md\`.
 - **\`--output\` writes only the first image.** If you asked for several, the rest
   exist only as URLs.
 - **Placeholder art is not a deliverable.** Generating a hero image to unblock a
@@ -1502,6 +1516,87 @@ deployment keeps using whatever it was built with until it's redeployed —
 run \`workser deploy\` (\`--prod\` for the production key) to pick up the new
 value. \`key rotate\` prints the new secret exactly once; it is never shown
 again or stored anywhere in the clear.
+`,
+  },
+  {
+    topic: "line",
+    title: "LINE Official Account",
+    summary: "Connect a LINE OA once, then send, reply, broadcast, build rich menus and read insight — from the CLI or from an agent.",
+    commands: ["line"],
+    source: "skills/workser/reference/line.md",
+    body: `# LINE Official Account
+
+Connect the business's LINE account to this project **once**. After that the same
+account is reachable from here, from Workser Code, and from any Agent Cloud agent
+in this project — including the one a LINE message starts.
+
+\`\`\`
+workser line status                          # is anything connected?
+workser line connect --token <channelAccessToken> [--secret <channelSecret>]
+workser line verify                          # ask LINE if the token still works
+workser line disconnect
+
+workser line ops [--group messaging|richmenu|audience|insight|people|group|quota|content|account]
+workser line call <operation> --params '<json>'   # any of the 70 operations
+
+workser line send <to> "<text>"              # push to a user, group or room id
+workser line reply <replyToken> "<text>"     # answer a message — free, single-use
+workser line broadcast "<text>"              # EVERY follower, one message each
+workser line quota                           # allowance left this month
+workser line profile <userId>
+\`\`\`
+
+## Getting the token
+
+LINE Developers console → your Messaging API channel → **Messaging API** tab →
+*Channel access token* (long-lived). \`--secret\` is the **Basic settings** →
+*Channel secret*, and is only needed if you want LINE's own signature check on
+incoming webhooks.
+
+\`connect\` calls LINE immediately to prove the token works, so a mistyped token
+fails here rather than an hour later as a customer message nobody answered.
+
+## \`call\` is the whole API
+
+\`ops\` prints every operation with a one-line summary. The \`●\` marks the ones that
+send something, spend quota, or change the account.
+
+\`\`\`
+workser line call push --params '{"to":"U4af…","messages":[{"type":"text","text":"Your order shipped"}]}'
+workser line call richmenu_list
+workser line call insight_followers --params '{"date":"20260909"}'
+workser line call webhook_endpoint_set --params '{"endpoint":"https://…"}'
+\`\`\`
+
+Parameters are flat — path, query and body fields all go in \`--params\` together and
+the server sorts them. Fields it has never heard of are **forwarded to LINE
+untouched**, so a flex component LINE shipped last week works today.
+
+## Reply beats push
+
+\`reply\` uses the token that came with the incoming message. It is **free** and does
+not touch the monthly quota; \`push\` costs one message per recipient. The token is
+single-use and expires within a minute or so, so reply first and fall back to push.
+
+\`broadcast\` sends to every follower and spends one message each. On a large account
+that is the most expensive call in the list — say what it will cost before running it.
+
+## Rich menus, in order
+
+A rich menu does nothing until it has both a picture and a place to appear:
+
+1. \`richmenu_create\` — the layout and tappable areas. Returns an id.
+2. \`richmenu_upload_image\` — \`content\` is the file **base64-encoded**, with
+   \`content_type\`. The image must match the declared size exactly.
+3. \`richmenu_set_default\` (everybody) or \`richmenu_link_user\` (one person).
+
+\`richmenu_validate\` checks a layout without creating it.
+
+## When it is an agent doing this
+
+An Agent Cloud agent in a project with a connected LINE account gets these as tools
+automatically — there is nothing to bind. Sends go through the agent's approval gate;
+reads do not. See \`workser help agent-cloud\`.
 `,
   },
   {
@@ -1872,6 +1967,40 @@ workser storage put <local> <key>   # upload a file into the bucket
 workser storage get <key> [dest]    # download an object (or print its URL)
 \`\`\`
 
+## This is where media goes — the folder is for code
+
+Every project has this bucket, provisioned and paid for, served over a CDN, and
+visible to the owner on the Files screen. It is the **default** home for generated
+art, product photography, PDFs, exports, avatars and anything a user uploads.
+
+**Default, not mandate.** An owner who wants Cloudinary, their own S3, or anything
+else is entitled to it — build it and don't argue. What is not yours to do is pick
+the alternative for them, or drift into one because it was quicker. If you think
+there is a real reason to go outside, say so and let them answer, then
+\`workser decision create\` it so the next agent doesn't quietly reverse it.
+
+**The repo is not one of the options.** Whichever provider the owner chose, files
+under \`public/\`, \`assets/\` or \`static/\` cost them four things, none recoverable
+later:
+
+- **They are committed.** Publishing runs \`git add -A\` over the app folder, so
+  every image enters the repository's history. Deleting it afterwards does not
+  remove it.
+- **They ride in every deploy.** The source bundle has a 25MB cap; enough media
+  and publishing stops working outright, with an error about the bundle rather
+  than about the images.
+- **They cannot change without a redeploy.** A photo the owner wants swapped
+  becomes a code change and a build. From the bucket it is one \`storage put\`.
+- **They are invisible.** The Files screen lists the bucket. Nothing there shows
+  what is sitting in the repo, so the owner cannot find, replace or delete it.
+
+Small build-time assets — a logo, a favicon, an icon, an SVG the bundler inlines —
+are the exception. Anything that is content, or that a user produced, is not.
+
+\`\`\`bash
+workser storage put ./out/hero.png products/hero.png --json   # → .data.url
+\`\`\`
+
 ## Notes that matter
 
 - **One bucket per project, shared by its apps.** Namespace your keys by app or
@@ -1881,7 +2010,9 @@ workser storage get <key> [dest]    # download an object (or print its URL)
 - **This is not where app uploads should go through you.** At runtime the app uses
   \`workser.storage\` from \`@workser/app\`, and for anything large it should request a
   presigned upload URL so the bytes never pass through Workser. See the
-  \`workser-sdk\` skill.
+  \`workser-sdk\` skill. Writing an upload handler that saves into the app's own
+  filesystem is the same mistake as above, plus one more: on a serverless host the
+  file is gone at the end of the request.
 
 ## Not the same as \`workser neon storage\`
 

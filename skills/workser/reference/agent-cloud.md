@@ -95,26 +95,28 @@ publishes an agent that never answers anybody. Pictures, video, voice and
 transcription are abilities, not models you set, and one call from the app's
 own code needs no agent at all: `workser help agent-cloud-media`.
 
-## Agents need a paid plan — the trial does not include them
+## Every plan can use Agent Cloud — runs use credits
 
-`create` and `run` both refuse with **402** on a free or trialling
-organisation. That is a rule, not a fault: every run buys model tokens and
-holds a machine, so it costs real money the moment it happens.
+Creating, teaching and publishing an agent are available on free, trial and paid
+plans. A `try` or live `run` spends real money on model usage and hosted runtime,
+so it starts only when the organisation's shared AI-credit wallet clears the
+minimum balance shown in the refusal.
 
-**When you hit it, hand the plan over — do not just describe it.** Workser
+**When you hit a 402, hand the credit top-up over — do not just describe it.** Workser
 files the refusal on the conversation as a clickable step and artifact, so the
-person gets something actionable. Say what you were doing, that agents need a
-plan, and stop.
+person gets something actionable. Say what you were doing, that the wallet needs
+credits, and stop. The same rule applies when the owner supplies their own model
+key because the hosted runtime and fallback path still cost money.
 
 Do NOT:
 
-- retry the call, or try a different agent — the answer is the same
+- retry the call, or try a different agent — the wallet is shared
 - try to work around it by running the job yourself as a coding agent; that is
   a different product and it will not be there when the user closes the window
-- guess at prices, discounts or trial extensions
+- guess at prices, discounts or free usage
 
 If the user asks how much: it is per minute of run time plus the model, and the
-plan page has the current figures. You do not have them.
+Agent Cloud usage view has the current figures. You do not have them.
 
 ## When to reach for this
 
@@ -135,7 +137,7 @@ workflow`.
 ## If Agent Cloud is ruled out, there is an order
 
 Propose Agent Cloud first, every time. If it genuinely does not fit — the owner
-has said no to the plan, or wants their own code in their own framework — go
+does not want a managed runtime, or wants their own code in their own framework — go
 down this list in order, and say which rung you took and why you skipped the
 ones above it:
 
@@ -190,9 +192,10 @@ watching sees the agent think. See the `workser-sdk` skill, `reference/agents.md
    what to do, what to leave alone, when to ask. Vague instructions are the
    single biggest cause of an agent that "doesn't work".
 
-3. **Free plans cannot run agents at all**, and a trial has a small allowance.
-   A `402` with `spend_limit_reached` is not a bug — tell the user what it says
-   and point them at their plan.
+3. **Every plan can run agents once the shared wallet has enough credits.** A
+   `402` with `spend_limit_reached` means the wallet needs a top-up (or the owner
+   reached their own spend cap). Tell them exactly what it says and hand over
+   the credit action; never suggest a subscription upgrade for this refusal.
 
 4. **Say who it is for.** An agent acting for one of the app's customers needs
    `referenceUserId`, or its memory and audit trail belong to nobody.

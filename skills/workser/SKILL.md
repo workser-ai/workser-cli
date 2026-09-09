@@ -48,10 +48,12 @@ model call before you have ruled it out. A hand-written one is invisible to the
 Agent Cloud console, unversioned, unmetered, and needs a model credential nothing
 mints — so it answers nobody in production.
 
-It needs a paid plan (Spark or above): say so when you propose it, rather than
-quietly building something else. Ruled out for a stated reason, there is an ORDER
-below it — Claude's managed agents (console.claude.com), Eve, LangChain in
-Python, then hand-built — and you say which rung you took and why.
+It is available on every plan. Creating, configuring and publishing an agent do
+not require a subscription upgrade; a test or live run needs enough prepaid AI
+credits. If a run returns 402, hand the credit top-up to the owner and stop — do
+not quietly build something else. Ruled out for a stated product reason, there
+is an ORDER below it — Claude's managed agents (console.claude.com), Eve,
+LangChain in Python, then hand-built — and you say which rung you took and why.
 `workser help agent-cloud` has all of it, including the case that legitimately
 starts lower: a developer wanting their own agent code, knowing this exists.
 
@@ -131,7 +133,8 @@ workser deploy --prod --watch --json            # 8. ship → stable *.workser.a
 
 - Success: use `.data` (`.data.url` after deploy, a `.data` array after `list`).
 - Failure: check `.error.code` — `not_connected` (open Orbit, or `workser login`
-  for CI) · `unauthorized` · `no_project` (the user links it in Orbit) ·
+  for CI; `workser logout` clears it) · `unauthorized` ·
+  `no_project` (the user links it in Orbit) ·
   `owner_only`/`awaiting_approval` (rules 4–5) · `needs_local_app` (no Workser
   app here, so folder commands cannot run — say so, don't reach for `git`).
 

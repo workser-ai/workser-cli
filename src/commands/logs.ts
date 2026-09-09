@@ -37,7 +37,12 @@ export function registerLogs(program: Command): void {
           throw new WorkserError(parsed.error!, { code: "bad_input" });
         }
         const scope = {
-          ...(opts.app ? { webAppId: String(opts.app) } : {}),
+          // `--app` wins; otherwise the app this folder is linked to (`ctx.appId`,
+          // from `.workser-app`). Standing in an app folder and being told
+          // "needs a webAppId" was the CLI refusing to read the marker it had
+          // already read for `status`. Outside any app folder this stays unset
+          // and the server's own refusal (never the primary-app guess) applies.
+          ...(opts.app || ctx.appId ? { webAppId: String(opts.app ?? ctx.appId) } : {}),
           ...(parsed.value ? { environment: parsed.value } : {}),
         };
 
