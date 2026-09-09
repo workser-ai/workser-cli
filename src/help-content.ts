@@ -1846,7 +1846,7 @@ Two caveats worth saying out loud rather than letting the owner find later:
     topic: "roles",
     title: "Delegate to roles",
     summary: "Hand a focused subtask to another configured local agent.",
-    commands: ["agent"],
+    commands: ["agent","team"],
     source: "skills/workser/reference/roles.md",
     body: `# Delegate to roles
 
@@ -1860,6 +1860,9 @@ workser agent spawn <agent> "<task>" [--role <label>] [--instructions <text>] [-
                                      # spin up a TEMPORARY teammate on any connected agent CLI
 workser agent main                  # show the configured main agent
 \`\`\`
+
+\`workser team\` is the same command. The Team screen and your own briefing both
+call these people a team, so both words work here.
 
 ## How to use it
 

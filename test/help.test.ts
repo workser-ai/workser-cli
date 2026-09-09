@@ -54,7 +54,11 @@ function registeredCommands(): string[] {
     env: { PATH: process.env.PATH, NO_COLOR: "1" },
   });
   const commands = help.slice(help.indexOf("\nCommands:"));
-  return [...commands.matchAll(/^ {2}(\S+)/gm)].map((m) => m[1]);
+  // Commander prints an aliased command as `agent|team`. Both words are things a
+  // caller can actually type, so both count as registered — otherwise adding an
+  // alias would report the real command as unregistered and its alias as
+  // undocumented, in the same run.
+  return [...commands.matchAll(/^ {2}(\S+)/gm)].flatMap((m) => m[1].split("|"));
 }
 
 describe("workser help", () => {

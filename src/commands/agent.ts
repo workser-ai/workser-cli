@@ -21,6 +21,20 @@ const SPAWNABLE_AGENTS = ["claude_code", "codex", "kimi", "opencode", "grok"];
 export function registerAgent(program: Command): void {
   const agent = program
     .command("agent")
+    /**
+     * `team` IS THE WORD EVERYTHING ELSE USES.
+     *
+     * The desktop screen is called Team, and every turn's prompt is written in
+     * that vocabulary — "the roster", "what the configured TEAMMATE brings",
+     * "which teammate this turn is". Only the CLI called the same thing
+     * `agent`, so an agent asked to check its team's roles typed
+     * `workser team list` and got `unknown command 'team'`: a real failure
+     * caused purely by two nouns for one concept.
+     *
+     * Commander's did-you-mean is no help here — it suggests on edit distance,
+     * and `team` is nowhere near `agent`. An alias is, so both words work.
+     */
+    .alias("team")
     .description("Delegate focused subtasks to your configured agent roles (each runs isolated)");
 
   agent
