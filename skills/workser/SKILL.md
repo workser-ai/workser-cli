@@ -48,12 +48,9 @@ model call before you have ruled it out. A hand-written one is invisible to the
 Agent Cloud console, unversioned, unmetered, and needs a model credential nothing
 mints — so it answers nobody in production.
 
-It is available on every plan. Creating, configuring and publishing an agent do
-not require a subscription upgrade; a test or live run needs enough prepaid AI
-credits. If a run returns 402, hand the credit top-up to the owner and stop — do
-not quietly build something else. Ruled out for a stated product reason, there
-is an ORDER below it — Claude's managed agents (console.claude.com), Eve,
-LangChain in Python, then hand-built — and you say which rung you took and why.
+Agent Cloud is on every plan. Setup and publish are free; test and live runs need
+prepaid AI credits. On 402, hand over the top-up and stop — do not build a hidden
+substitute. If ruled out for a product reason, follow the ORDER below and say why.
 `workser help agent-cloud` has all of it, including the case that legitimately
 starts lower: a developer wanting their own agent code, knowing this exists.
 

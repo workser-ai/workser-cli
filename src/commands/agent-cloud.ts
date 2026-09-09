@@ -396,6 +396,168 @@ export function registerAgentCloud(program: Command): void {
    * draft, so every `set` and `add` above is inert until this runs — an agent
    * that skips it has done a lot of careful work that changes nothing.
    */
+  // ===========================================================================
+  // TRIGGERS — what STARTS an agent
+  // ===========================================================================
+  //
+  // Deliberately not folded into the `add <agentId> <kind>` table above.
+  // Everything in that table is part of the agent's VERSION and is inert until
+  // `publish`; a trigger is its own row and works the moment it is saved.
+  // Sharing the command would attach that table's "Not live yet — run publish"
+  // footer to a LINE channel that is already receiving messages.
+
+  cloud
+    .command("triggers <agentId>")
+    .description("What starts this agent — schedules, chat channels, app events")
+    .action(
+      action(async ({ ctx, args }) => {
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/triggers`,
+        );
+        const items = res?.triggers ?? [];
+        ok(res, () => {
+          if (!items.length) {
+            return line(
+              pc.dim("Nothing starts this agent yet — it only runs when asked."),
+            );
+          }
+          for (const t of items) {
+            const state =
+              t.status === "active" ? pc.green("on") : pc.yellow(t.status);
+            const when =
+              t.schedule_config?.cron_expression ??
+              t.app_event_config?.event_source ??
+              t.app_event_config?.event_type ??
+              "";
+            line(
+              `${pc.bold(t.name ?? t.trigger_type)}  ${state}  ${pc.dim(when)}`,
+            );
+            line("  " + pc.dim(t.id));
+          }
+        });
+      }),
+    );
+
+  cloud
+    .command("trigger-add <agentId> <kind> [pairs...]")
+    .description(
+      'Start an agent on a schedule, a chat channel or an app event. ' +
+        'kind is schedule | chat | app_event. e.g. trigger-add <id> chat app_type=line',
+    )
+    .action(
+      action(async ({ ctx, args }) => {
+        const kind = String(args[1]);
+        const pairs = parsePairs(
+          (args[2] as unknown as string[]) ?? [],
+          [
+            "name",
+            "rule",
+            "cron",
+            "timezone",
+            "app_type",
+            "event_type",
+            "connected_account_id",
+          ],
+        );
+
+        const body = buildTriggerBody(kind, pairs);
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/triggers`,
+          { method: "POST", body },
+        );
+        ok(res, () => {
+          line(pc.green("Added.") + "  " + pc.dim(res?.trigger?.id ?? ""));
+          if (kind === "chat") {
+            // The URL is the entire point of a chat trigger and it does not
+            // exist until the trigger does. Saying so here is the difference
+            // between a channel that works and one that sits there looking
+            // finished and never receives anything.
+            line(
+              pc.dim("Now get the webhook URL to paste into the platform: ") +
+                pc.bold(
+                  `workser agent-cloud trigger-setup ${args[0]} ${res?.trigger?.id ?? "<triggerId>"}`,
+                ),
+            );
+          }
+        });
+      }),
+    );
+
+  cloud
+    .command("trigger-setup <agentId> <triggerId>")
+    .description("The webhook URL and console steps for a chat trigger")
+    .action(
+      action(async ({ ctx, args }) => {
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/triggers/${encodeURIComponent(args[1])}/setup`,
+        );
+        ok(res, () => {
+          line(pc.bold(`Connect ${res?.label ?? "this channel"}`));
+          line("");
+          line(pc.bold("Webhook URL"));
+          line("  " + (res?.webhook_url ?? pc.dim("—")));
+          if (res?.verify_token) {
+            line(pc.bold("Verify token"));
+            line("  " + res.verify_token);
+          }
+          line("");
+          for (const step of res?.setup_steps ?? []) line("  " + pc.dim(step));
+          line("");
+          line(
+            res?.is_verified
+              ? pc.green(`Receiving — ${res.event_count ?? 0} events so far.`)
+              : pc.yellow("Nothing has arrived yet."),
+          );
+        });
+      }),
+    );
+
+  cloud
+    .command("trigger-remove <agentId> <triggerId>")
+    .description("Stop something from starting this agent")
+    .action(
+      action(async ({ ctx, args }) => {
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/triggers/${encodeURIComponent(args[1])}`,
+          { method: "DELETE" },
+        );
+        ok(res, () => line("Removed."));
+      }),
+    );
+
+  cloud
+    .command("trigger-events <agentId>")
+    .description("What has fired lately, and whether it started the agent")
+    .option("--limit <n>", "how many to show")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/trigger-events`,
+          { query: { limit: opts.limit } },
+        );
+        const items = res?.events ?? [];
+        ok(res, () => {
+          if (!items.length) return line(pc.dim("Nothing has fired yet."));
+          for (const e of items) {
+            const state =
+              e.status === "matched"
+                ? pc.green("started the agent")
+                : e.status === "failed"
+                  ? pc.red("failed")
+                  : pc.yellow(e.status);
+            line(`${state}  ${e.summary ?? e.trigger_name ?? ""}`);
+            if (e.error_message) line("  " + pc.red(e.error_message));
+            else if (e.reasoning) line("  " + pc.dim(e.reasoning));
+          }
+        });
+      }),
+    );
+
   cloud
     .command("publish <agentId>")
     .description("Put the current setup live — nothing takes effect until this runs")
@@ -705,4 +867,75 @@ function parsePairs(pairs: string[], allowed: string[]): Record<string, string> 
     if (value) out[key] = value;
   }
   return out;
+}
+
+/**
+ * A trigger body from `key=value` pairs.
+ *
+ * The three kinds need genuinely different shapes upstream, and guessing
+ * between them from the pairs alone would be the kind of cleverness that
+ * creates a schedule when somebody meant a chat channel.
+ */
+function buildTriggerBody(
+  kind: string,
+  pairs: Record<string, string>,
+): Record<string, unknown> {
+  const base = {
+    name: pairs.name,
+    rule: pairs.rule,
+  };
+
+  if (kind === "schedule") {
+    if (!pairs.cron) {
+      throw new Error(
+        'A schedule needs cron=, e.g. cron="0 9 * * 1-5" for every weekday at 9am.',
+      );
+    }
+    return {
+      ...base,
+      trigger_type: "schedule",
+      name: pairs.name ?? "Scheduled run",
+      schedule_config: {
+        cron_expression: pairs.cron,
+        timezone: pairs.timezone ?? "UTC",
+      },
+    };
+  }
+
+  if (kind === "chat") {
+    if (!pairs.app_type) {
+      throw new Error(
+        "A chat trigger needs app_type=, one of: line, telegram, discord, slack, " +
+          "facebook_messenger, instagram, whatsapp, twitter, custom.",
+      );
+    }
+    return {
+      ...base,
+      trigger_type: "chat_webhook",
+      chat_webhook_config: {
+        app_type: pairs.app_type,
+        event_type: pairs.event_type ?? "message",
+      },
+    };
+  }
+
+  if (kind === "app_event") {
+    if (!pairs.event_type || !pairs.connected_account_id) {
+      throw new Error(
+        "An app-event trigger needs event_type= and connected_account_id= " +
+          "(see `workser connection list`).",
+      );
+    }
+    return {
+      ...base,
+      trigger_type: "app_event",
+      name: pairs.name ?? pairs.event_type,
+      app_event_config: {
+        event_type: pairs.event_type,
+        connected_account_id: pairs.connected_account_id,
+      },
+    };
+  }
+
+  throw new Error(`Unknown kind "${kind}". One of: schedule | chat | app_event`);
 }

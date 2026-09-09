@@ -48,6 +48,12 @@ sending it. That matters: the API silently drops unknown fields, so a typo
 would otherwise be accepted, dropped, and reported as success — leaving an
 agent that had been told nothing.
 
+## Nothing starts it until you give it a trigger
+
+A published agent runs when asked and at no other time. A time, a chat message
+or an app event is a **trigger**, and it works the moment it is saved — it is
+not part of the agent's version. `workser help agent-triggers`.
+
 ## Nothing takes effect until you publish
 
 **This is the step to not forget.** The runtime resolves the PUBLISHED version
@@ -193,9 +199,9 @@ watching sees the agent think. See the `workser-sdk` skill, `reference/agents.md
    single biggest cause of an agent that "doesn't work".
 
 3. **Every plan can run agents once the shared wallet has enough credits.** A
-   `402` with `spend_limit_reached` means the wallet needs a top-up (or the owner
-   reached their own spend cap). Tell them exactly what it says and hand over
-   the credit action; never suggest a subscription upgrade for this refusal.
+   `402` with `insufficient_credits` needs a top-up; `spend_limit_reached` means
+   the owner reached the guard rail they set. Tell them exactly what it says and
+   hand over the matching action; never suggest a subscription upgrade.
 
 4. **Say who it is for.** An agent acting for one of the app's customers needs
    `referenceUserId`, or its memory and audit trail belong to nobody.

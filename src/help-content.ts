@@ -149,6 +149,12 @@ sending it. That matters: the API silently drops unknown fields, so a typo
 would otherwise be accepted, dropped, and reported as success — leaving an
 agent that had been told nothing.
 
+## Nothing starts it until you give it a trigger
+
+A published agent runs when asked and at no other time. A time, a chat message
+or an app event is a **trigger**, and it works the moment it is saved — it is
+not part of the agent's version. \`workser help agent-triggers\`.
+
 ## Nothing takes effect until you publish
 
 **This is the step to not forget.** The runtime resolves the PUBLISHED version
@@ -294,15 +300,85 @@ watching sees the agent think. See the \`workser-sdk\` skill, \`reference/agents
    single biggest cause of an agent that "doesn't work".
 
 3. **Every plan can run agents once the shared wallet has enough credits.** A
-   \`402\` with \`spend_limit_reached\` means the wallet needs a top-up (or the owner
-   reached their own spend cap). Tell them exactly what it says and hand over
-   the credit action; never suggest a subscription upgrade for this refusal.
+   \`402\` with \`insufficient_credits\` needs a top-up; \`spend_limit_reached\` means
+   the owner reached the guard rail they set. Tell them exactly what it says and
+   hand over the matching action; never suggest a subscription upgrade.
 
 4. **Say who it is for.** An agent acting for one of the app's customers needs
    \`referenceUserId\`, or its memory and audit trail belong to nobody.
 
 5. **Do not invent an agent the user did not ask for.** Creating one is cheap;
    an agent nobody wanted, quietly costing money per run, is not.
+`,
+  },
+  {
+    topic: "agent-triggers",
+    title: "What starts an Agent Cloud agent",
+    summary: "Schedules, chat channels and app events — a trigger works the moment it is saved, unlike everything else on an agent.",
+    commands: [],
+    source: "skills/workser/reference/agent-triggers.md",
+    body: `# What starts an Agent Cloud agent
+
+A published agent runs when somebody asks it to and at no other time. A trigger
+is what makes it start on its own — a time, a chat message, or an event in a
+connected app.
+
+\`\`\`
+workser agent-cloud triggers <id>                       # what starts it today
+workser agent-cloud trigger-add <id> schedule cron="0 9 * * 1-5" name="Morning report"
+workser agent-cloud trigger-add <id> chat app_type=line
+workser agent-cloud trigger-add <id> app_event event_type=GMAIL_NEW_GMAIL_MESSAGE connected_account_id=<id>
+workser agent-cloud trigger-setup <id> <triggerId>      # the webhook URL to paste
+workser agent-cloud trigger-events <id>                 # what fired, and what it started
+workser agent-cloud trigger-remove <id> <triggerId>
+\`\`\`
+
+**A trigger works the moment it is saved** — unlike everything above, it is not
+part of the agent's version and does not wait for a publish.
+
+\`rule=\` is optional and is the FIRING rule, not the agent's instructions:
+\`rule="only when the message mentions an order"\`. Leave it empty on a chat
+channel and every message reaches the agent, which is what a support agent
+wants — the agent decides what to do with each one.
+
+For a chat trigger, **\`trigger-setup\` is not optional**: it returns the webhook
+URL to paste into LINE's or Slack's console, and it says whether anything has
+arrived yet. Without that step the trigger sits there looking finished and
+never receives anything.
+
+To let the agent ANSWER on that channel, the project also needs the account
+connected — \`workser line connect --token …\`. See \`workser help chat-channels\`.
+
+## The two halves of a chat agent
+
+Receiving and answering are separate, and each has its own setup:
+
+| | What it does | How |
+| --- | --- | --- |
+| The trigger | a message STARTS the agent | \`trigger-add <id> chat app_type=line\`, then \`trigger-setup\` |
+| The connection | the agent can ANSWER | \`workser line connect --token …\` |
+
+Do only the first and the agent listens and never speaks. Do only the second and
+nothing ever wakes it up.
+
+With both in place, a run started by a message is handed the reply token and the
+sender, and gets every operation of that account as a tool — \`line_reply\`,
+\`slack_send_message\` and the rest. Sends go through the agent's approval gate;
+reads do not.
+
+## Schedules, in plain words
+
+\`cron=\` takes a standard five-field expression. The four people ask for:
+
+\`\`\`
+cron="0 9 * * 1-5"    every weekday at 9am
+cron="0 9 * * *"      every day at 9am
+cron="0 * * * *"      every hour
+cron="0 9 * * 1"      every Monday at 9am
+\`\`\`
+
+\`timezone=\` defaults to UTC, which is almost never what somebody means by "9am".
+Set it: \`timezone="Asia/Bangkok"\`.
 `,
   },
   {
@@ -720,6 +796,113 @@ copy is the current one.
 \`workser business\` is how **you** inspect and fix data while building. The app reads
 the same records at runtime through \`workser.business\` in \`@workser/app\` — see the
 \`workser-sdk\` skill. An app shelling out to this CLI per request is wrong.
+`,
+  },
+  {
+    topic: "chat-channels",
+    title: "LINE, Telegram, Discord, Slack",
+    summary: "Connect a chat account once, then send, reply and read from the CLI or from an agent — LINE gets its whole Messaging API.",
+    commands: ["line","telegram","discord","slack"],
+    source: "skills/workser/reference/chat-channels.md",
+    body: `# LINE, Telegram, Discord, Slack
+
+Connect the business's chat account to this project **once**. After that it is
+reachable from here, from Workser Code, and from any Agent Cloud agent in this
+project — including the one a chat message starts.
+
+Every provider takes the same six verbs:
+
+\`\`\`
+workser <provider> status                       # is anything connected?
+workser <provider> connect --token <token>
+workser <provider> verify                       # does the credential still work?
+workser <provider> disconnect
+workser <provider> ops [--group <name>]         # everything it can do
+workser <provider> call <operation> --params '<json>'
+\`\`\`
+
+where \`<provider>\` is \`line\`, \`telegram\`, \`discord\` or \`slack\`.
+
+## Getting the token
+
+| Provider | Where | Flag |
+| --- | --- | --- |
+| LINE | Developers console → Messaging API → Channel access token | \`--token\`, plus \`--secret\` for the channel secret |
+| Telegram | @BotFather → \`/newbot\` or \`/token\` | \`--token\` |
+| Discord | Developer Portal → your app → Bot → Reset Token | \`--token\` (the bot must also be invited to the server) |
+| Slack | Your app → OAuth & Permissions → Bot User OAuth Token (\`xoxb-\`) | \`--token\`, plus \`--signing-secret\` |
+
+\`connect\` calls the provider immediately to prove the credential works, so a
+mistyped token fails right there instead of an hour later as a customer message
+nobody answered.
+
+## \`call\` is the whole API
+
+\`ops\` prints every operation with a one-line summary. The \`●\` marks the ones
+that send something, spend quota, or change the account.
+
+\`\`\`
+workser line call push --params '{"to":"U4af…","messages":[{"type":"text","text":"Your order shipped"}]}'
+workser line call richmenu_list
+workser telegram call send_chat_action --params '{"chat_id":123,"action":"typing"}'
+workser slack call list_conversations --params '{"types":"public_channel"}'
+workser discord call create_thread --params '{"channel_id":"…","message_id":"…","name":"Order #4021"}'
+\`\`\`
+
+Parameters are flat — path, query and body fields all go in \`--params\` together
+and the server sorts them. Fields it has never heard of are **forwarded
+untouched**, so a flex component or a Slack block the vendor shipped last week
+works today.
+
+## Shortcuts
+
+\`\`\`
+workser line send <to> "<text>" | reply <replyToken> "<text>" | broadcast "<text>"
+workser line quota | profile <userId>
+workser telegram send <chatId> "<text>"
+workser discord send <channelId> "<text>"
+workser slack send <channel> "<text>"
+\`\`\`
+
+## Reply beats push, on LINE
+
+\`reply\` uses the token that came with the incoming message. It is **free** and
+does not touch the monthly quota; \`push\` costs one message per recipient. The
+token is single-use and expires within a minute or so, so reply first and fall
+back to push.
+
+\`broadcast\` sends to every follower and spends one message each. On a large
+account that is the most expensive call available — say what it will cost
+before running it.
+
+## How complete each one is
+
+**LINE is the deep one** — its entire Messaging API, about seventy operations:
+messaging, rich menus, audiences and narrowcast, insight, quota, content,
+groups and rooms, and the webhook endpoint itself.
+
+**Telegram, Discord and Slack carry what a chat agent needs** — send, reply,
+edit, delete, react, typing indicator, threads and DMs, plus reading people and
+conversations. Not their whole APIs. \`ops\` is the truth; ask it rather than
+assuming an operation exists.
+
+## Rich menus, in order (LINE)
+
+A rich menu does nothing until it has both a picture and a place to appear:
+
+1. \`richmenu_create\` — the layout and tappable areas. Returns an id.
+2. \`richmenu_upload_image\` — \`content\` is the file **base64-encoded**, with
+   \`content_type\`. The image must match the declared size exactly.
+3. \`richmenu_set_default\` (everybody) or \`richmenu_link_user\` (one person).
+
+\`richmenu_validate\` checks a layout without creating it.
+
+## When it is an agent doing this
+
+An Agent Cloud agent in a project with a connected account gets these as tools
+automatically — there is nothing to bind, and no capability to switch on. Sends
+go through the agent's approval gate; reads do not. See
+\`workser help agent-cloud\`.
 `,
   },
   {
@@ -1516,87 +1699,6 @@ deployment keeps using whatever it was built with until it's redeployed —
 run \`workser deploy\` (\`--prod\` for the production key) to pick up the new
 value. \`key rotate\` prints the new secret exactly once; it is never shown
 again or stored anywhere in the clear.
-`,
-  },
-  {
-    topic: "line",
-    title: "LINE Official Account",
-    summary: "Connect a LINE OA once, then send, reply, broadcast, build rich menus and read insight — from the CLI or from an agent.",
-    commands: ["line"],
-    source: "skills/workser/reference/line.md",
-    body: `# LINE Official Account
-
-Connect the business's LINE account to this project **once**. After that the same
-account is reachable from here, from Workser Code, and from any Agent Cloud agent
-in this project — including the one a LINE message starts.
-
-\`\`\`
-workser line status                          # is anything connected?
-workser line connect --token <channelAccessToken> [--secret <channelSecret>]
-workser line verify                          # ask LINE if the token still works
-workser line disconnect
-
-workser line ops [--group messaging|richmenu|audience|insight|people|group|quota|content|account]
-workser line call <operation> --params '<json>'   # any of the 70 operations
-
-workser line send <to> "<text>"              # push to a user, group or room id
-workser line reply <replyToken> "<text>"     # answer a message — free, single-use
-workser line broadcast "<text>"              # EVERY follower, one message each
-workser line quota                           # allowance left this month
-workser line profile <userId>
-\`\`\`
-
-## Getting the token
-
-LINE Developers console → your Messaging API channel → **Messaging API** tab →
-*Channel access token* (long-lived). \`--secret\` is the **Basic settings** →
-*Channel secret*, and is only needed if you want LINE's own signature check on
-incoming webhooks.
-
-\`connect\` calls LINE immediately to prove the token works, so a mistyped token
-fails here rather than an hour later as a customer message nobody answered.
-
-## \`call\` is the whole API
-
-\`ops\` prints every operation with a one-line summary. The \`●\` marks the ones that
-send something, spend quota, or change the account.
-
-\`\`\`
-workser line call push --params '{"to":"U4af…","messages":[{"type":"text","text":"Your order shipped"}]}'
-workser line call richmenu_list
-workser line call insight_followers --params '{"date":"20260909"}'
-workser line call webhook_endpoint_set --params '{"endpoint":"https://…"}'
-\`\`\`
-
-Parameters are flat — path, query and body fields all go in \`--params\` together and
-the server sorts them. Fields it has never heard of are **forwarded to LINE
-untouched**, so a flex component LINE shipped last week works today.
-
-## Reply beats push
-
-\`reply\` uses the token that came with the incoming message. It is **free** and does
-not touch the monthly quota; \`push\` costs one message per recipient. The token is
-single-use and expires within a minute or so, so reply first and fall back to push.
-
-\`broadcast\` sends to every follower and spends one message each. On a large account
-that is the most expensive call in the list — say what it will cost before running it.
-
-## Rich menus, in order
-
-A rich menu does nothing until it has both a picture and a place to appear:
-
-1. \`richmenu_create\` — the layout and tappable areas. Returns an id.
-2. \`richmenu_upload_image\` — \`content\` is the file **base64-encoded**, with
-   \`content_type\`. The image must match the declared size exactly.
-3. \`richmenu_set_default\` (everybody) or \`richmenu_link_user\` (one person).
-
-\`richmenu_validate\` checks a layout without creating it.
-
-## When it is an agent doing this
-
-An Agent Cloud agent in a project with a connected LINE account gets these as tools
-automatically — there is nothing to bind. Sends go through the agent's approval gate;
-reads do not. See \`workser help agent-cloud\`.
 `,
   },
   {
