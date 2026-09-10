@@ -66,6 +66,15 @@ export interface Goal {
    * `slice`, finish one task and come back rather than walking the phase.
    */
   pace?: string;
+  /**
+   * What the FIRST phase is for — `product | foundations`.
+   *
+   * `product` (the default) means phase one is the designed, working product
+   * the owner can open and use, with the foundations under it taken thin
+   * behind one seam and hardened in a later phase. `foundations` means settle
+   * the hard parts first — right for a port, or a fixed external contract.
+   */
+  build_order?: string;
   progress?: PhaseProgress[];
   currentPhase?: string | null;
   taskTotal?: number;
@@ -82,6 +91,16 @@ const STATUSES = ["proposed", "agreed", "working", "delivered", "abandoned"] as 
  * every task nor runs unattended through work nobody has seen.
  */
 const PACES = ["slice", "phase", "all"] as const;
+
+/**
+ * What the first phase is FOR.
+ *
+ * Ordering phases by what is riskiest is a good engineer's instinct and it
+ * produced a plan whose first phase was sign-in tenancy, an engine decision
+ * and durable jobs — while the editor that WAS the product sat in phase two,
+ * `0 of 7`, waiting. Which of the two an owner wants is theirs to say.
+ */
+const BUILD_ORDERS = ["product", "foundations"] as const;
 
 export function registerGoal(program: Command): void {
   const goal = program
@@ -151,6 +170,10 @@ export function registerGoal(program: Command): void {
       "--pace <value>",
       `how much to do before checking in — slice (one task, then show), phase (the current phase, the default), all (${PACES.join(" | ")})`,
     )
+    .option(
+      "--build-order <value>",
+      `what phase one is for — product (the designed, working product, the default) or foundations (settle the hard parts first) (${BUILD_ORDERS.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         requireProject(ctx);
@@ -204,6 +227,14 @@ export function registerGoal(program: Command): void {
             `Unknown --pace "${opts.pace}". Use one of: ${PACES.join(", ")}.`,
           );
         }
+        if (
+          opts.buildOrder !== undefined &&
+          !BUILD_ORDERS.includes(opts.buildOrder)
+        ) {
+          throw new WorkserError(
+            `Unknown --build-order "${opts.buildOrder}". Use one of: ${BUILD_ORDERS.join(", ")}.`,
+          );
+        }
 
         const row = await api<Goal>(ctx, "/v1/project-goals", {
           body: {
@@ -211,6 +242,7 @@ export function registerGoal(program: Command): void {
             title: args[0],
             outcome: opts.outcome,
             pace: opts.pace,
+            buildOrder: opts.buildOrder,
             phases: phases.map((name) => ({
               name,
               criteria: (criteria[name] ?? []).map((text, i) => ({
@@ -362,6 +394,10 @@ export function registerGoal(program: Command): void {
     .option("--phase <name...>", "replace the ordered phase list")
     .option("--status <value>", `one of: ${STATUSES.join(" | ")}`)
     .option("--pace <value>", `how much to do before checking in (${PACES.join(" | ")})`)
+    .option(
+      "--build-order <value>",
+      `what phase one is for (${BUILD_ORDERS.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         if (opts.status && !STATUSES.includes(opts.status)) {
@@ -372,6 +408,11 @@ export function registerGoal(program: Command): void {
         if (opts.pace && !PACES.includes(opts.pace)) {
           throw new WorkserError(
             `Unknown --pace "${opts.pace}". Use one of: ${PACES.join(", ")}.`,
+          );
+        }
+        if (opts.buildOrder && !BUILD_ORDERS.includes(opts.buildOrder)) {
+          throw new WorkserError(
+            `Unknown --build-order "${opts.buildOrder}". Use one of: ${BUILD_ORDERS.join(", ")}.`,
           );
         }
         const row = await api<Goal>(
@@ -385,6 +426,7 @@ export function registerGoal(program: Command): void {
               phases: opts.phase,
               status: opts.status,
               pace: opts.pace,
+              buildOrder: opts.buildOrder,
             },
           },
         );
@@ -421,6 +463,10 @@ function printGoal(g: Goal | null): void {
   // printed with the status rather than buried: `slice` means finish one task
   // and come back, and an agent that skips this line walks the whole phase.
   if (g.pace) line(pc.dim(`pace: ${paceLine(g.pace)}`));
+  // Printed beside the pace for the same reason: it is a standing instruction
+  // about the SHAPE, and an agent that files phase one without reading it
+  // plans the foundations the owner asked to see last.
+  if (g.build_order) line(pc.dim(`shape: ${buildOrderLine(g.build_order)}`));
 
   const progress = g.progress ?? [];
   if (!progress.length) {
@@ -483,6 +529,20 @@ function statusTag(status: string): string {
 export type { Context };
 
 /** The pace, said as an instruction rather than as a word. */
+/**
+ * The build order, said as an instruction rather than as a value.
+ *
+ * `product` is not "make it pretty" — it is an order of appearance, and the
+ * sentence has to carry the part that makes it safe: the plumbing under the
+ * first phase is THIN, not FAKE.
+ */
+function buildOrderLine(order: string): string {
+  if (order === "foundations") {
+    return "foundations — phase one settles the hard parts; the visible product comes after";
+  }
+  return "product — phase one is the designed, working product; take the plumbing thin behind one seam (never fake it) and harden it in a later phase";
+}
+
 function paceLine(pace: string): string {
   if (pace === "slice") return "slice — do ONE task, then stop and show the owner";
   if (pace === "all") return "all — work through the phases; report at the end";
