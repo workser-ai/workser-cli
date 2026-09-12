@@ -29,17 +29,7 @@ jobs:
           command: npm ci
       - run:
           name: Publish newer package version
-          command: |
-            LOCAL_VERSION="$(node -p "require('./package.json').version")"
-            PUBLISHED_VERSION="$(npm view @workser/cli version --registry=https://registry.npmjs.org 2>/dev/null || true)"
-
-            if [ -n "$PUBLISHED_VERSION" ] && { [ "$LOCAL_VERSION" = "$PUBLISHED_VERSION" ] || [ "$(printf '%s\\n%s\\n' "$PUBLISHED_VERSION" "$LOCAL_VERSION" | sort -V | tail -n 1)" != "$LOCAL_VERSION" ]; }; then
-              echo "Skipping publish: local version $LOCAL_VERSION is not newer than npm version $PUBLISHED_VERSION."
-              exit 0
-            fi
-
-            printf '//registry.npmjs.org/:_authToken=${WORKSER_NPM}\n' > ~/.npmrc
-            npm publish
+          command: node scripts/publish-if-newer.mjs
 
 workflows:
   verify-and-publish:
