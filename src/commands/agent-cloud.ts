@@ -86,7 +86,9 @@ export function registerAgentCloud(program: Command): void {
             line(pc.dim("No cloud agents yet."));
             line(
               pc.dim("Create one: ") +
-                pc.bold('workser agent-cloud create "Order desk" --instructions "..."'),
+                pc.bold(
+                  'workser agent-cloud create "Order desk" --instructions "..."',
+                ),
             );
             return;
           }
@@ -136,7 +138,10 @@ export function registerAgentCloud(program: Command): void {
     .description("One cloud agent, with its configuration")
     .action(
       action(async ({ ctx, args }) => {
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}`);
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}`,
+        );
         ok(res, () => {
           line(pc.bold(res?.name ?? args[0]));
           if (res?.description) line(pc.dim(res.description));
@@ -180,7 +185,9 @@ export function registerAgentCloud(program: Command): void {
       action(async ({ ctx, args, opts }) => {
         const id = args[0];
         if (!id) {
-          warn("Give an agent id to list its runs, or a run id to inspect one.");
+          warn(
+            "Give an agent id to list its runs, or a run id to inspect one.",
+          );
           return;
         }
         // A run id and an agent id are both opaque, so which endpoint to call
@@ -226,7 +233,18 @@ export function registerAgentCloud(program: Command): void {
    */
   const COLLECTIONS: Record<
     string,
-    { path: string; key: string; label: string; fields: string[]; required: string[] }
+    {
+      path: string;
+      key: string;
+      label: string;
+      fields: string[];
+      required: string[];
+    }
+    // A collection whose upstream shape is not flat reshapes here. Only API
+    // calls need it: six authentication answers are one `auth` object, and
+    // "what the agent may send" is a JSON Schema. Asking somebody to type a
+    // JSON Schema into a shell argument would not be a usable command.
+    & { toPayload?: (flat: Record<string, string>) => Record<string, unknown> }
   > = {
     skill: {
       path: "skills",
@@ -270,6 +288,94 @@ export function registerAgentCloud(program: Command): void {
       fields: ["subagent_id", "name", "description"],
       required: ["subagent_id", "name"],
     },
+    /**
+     * `workser agent-cloud add <id> api name=… url=… auth_type=workser_service auth_scopes=business:read`
+     *
+     * ===========================================================================
+     * WHY THIS ONE MATTERS FROM THE CLI IN PARTICULAR
+     * ===========================================================================
+     * This is the command the LOCAL agent uses. An agent working in somebody's
+     * repo, which has just built a service or found an API, can wire a hosted
+     * agent up to it without a person going to a screen — and with
+     * `auth_type=workser_service` it can wire one up to the customer's own
+     * Workser data with no credential passing through the agent, the terminal,
+     * the shell history or the repo. That last part is the whole point: an agent
+     * that had to handle an API key to do this would be an agent that leaks one.
+     */
+    api: {
+      path: "api-tools",
+      key: "api_tools",
+      label: "API call",
+      fields: [
+        "name",
+        "description",
+        "method",
+        "url",
+        "auth_type",
+        "auth_scopes",
+        "auth_env_key",
+        "auth_header_name",
+        "auth_query_param",
+        "params",
+        "is_write",
+      ],
+      required: ["name", "description", "url"],
+      toPayload: (flat) => {
+        const authType = flat.auth_type || "none";
+        const auth: Record<string, unknown> = { type: authType };
+        if (authType === "workser_service") {
+          auth.scopes = (flat.auth_scopes ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        } else if (authType !== "none") {
+          auth.env_key = flat.auth_env_key ?? "";
+          if (authType === "header") auth.header_name = flat.auth_header_name ?? "";
+          if (authType === "query") auth.query_param = flat.auth_query_param ?? "";
+        }
+
+        /**
+         * `params=sku:The product code,qty:How many` — a name and a one-line
+         * description each, which is all a JSON Schema needs from a person.
+         * Everything is a string and everything is required: an agent that
+         * needs to send a number sends "3", and every API accepts that.
+         */
+        const properties: Record<string, unknown> = {};
+        const names: string[] = [];
+        for (const part of (flat.params ?? "").split(",")) {
+          const spec = part.trim();
+          if (!spec) continue;
+          const at = spec.indexOf(":");
+          const name = (at > 0 ? spec.slice(0, at) : spec).trim();
+          if (!name) continue;
+          names.push(name);
+          properties[name] = {
+            type: "string",
+            description: at > 0 ? spec.slice(at + 1).trim() : name,
+          };
+        }
+
+        // A `{placeholder}` in the address is a path value; everything else
+        // falls to the method's default, which is what somebody expects
+        // without being asked.
+        const paramIn: Record<string, string> = {};
+        for (const match of (flat.url ?? "").matchAll(/\{([^}]+)\}/g)) {
+          const name = match[1].trim();
+          if (names.includes(name)) paramIn[name] = "path";
+        }
+
+        return {
+          name: flat.name,
+          description: flat.description,
+          method: (flat.method ?? "GET").toUpperCase(),
+          url: flat.url,
+          auth,
+          is_write: flat.is_write === "true",
+          params_schema: { type: "object", properties, required: names },
+          param_in: paramIn,
+        };
+      },
+    },
     workflow: {
       path: "workflows",
       key: "workflows",
@@ -287,8 +393,12 @@ export function registerAgentCloud(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const spec = COLLECTIONS[args[1]];
-        if (!spec) throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/${spec.path}`);
+        if (!spec)
+          throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/${spec.path}`,
+        );
         const items = res?.[spec.key] ?? [];
         ok(res, () => {
           if (!items.length) {
@@ -296,7 +406,8 @@ export function registerAgentCloud(program: Command): void {
             return;
           }
           for (const i of items) {
-            const title = i.name ?? i.display_name ?? i.key ?? i.workflow_id ?? i.id;
+            const title =
+              i.name ?? i.display_name ?? i.key ?? i.workflow_id ?? i.id;
             line(`${pc.bold(title)}  ${pc.dim(i.id)}`);
             if (i.description) line("  " + pc.dim(i.description));
             if (i.is_enabled === false) line("  " + pc.yellow("turned off"));
@@ -313,8 +424,12 @@ export function registerAgentCloud(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const spec = COLLECTIONS[args[1]];
-        if (!spec) throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
-        const body = parsePairs((args[2] as unknown as string[]) ?? [], spec.fields);
+        if (!spec)
+          throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
+        const body = parsePairs(
+          (args[2] as unknown as string[]) ?? [],
+          spec.fields,
+        );
         const missing = spec.required.filter((f) => !body[f]);
         if (missing.length) {
           throw new Error(
@@ -322,12 +437,18 @@ export function registerAgentCloud(program: Command): void {
               `Accepted: ${spec.fields.join(", ")}`,
           );
         }
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/${spec.path}`, {
-          method: "POST",
-          body,
-        });
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/${spec.path}`,
+          {
+            method: "POST",
+            body: spec.toPayload ? spec.toPayload(body) : body,
+          },
+        );
         ok(res, () => {
-          line(pc.green(`Added the ${spec.label}.`) + "  " + pc.dim(res?.id ?? ""));
+          line(
+            pc.green(`Added the ${spec.label}.`) + "  " + pc.dim(res?.id ?? ""),
+          );
           line(
             pc.dim("Not live yet — run ") +
               pc.bold(`workser agent-cloud publish ${args[0]}`) +
@@ -343,7 +464,8 @@ export function registerAgentCloud(program: Command): void {
     .action(
       action(async ({ ctx, args }) => {
         const spec = COLLECTIONS[args[1]];
-        if (!spec) throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
+        if (!spec)
+          throw new Error(`Unknown kind "${args[1]}". One of: ${kinds}`);
         const res = await api(
           ctx,
           `/v1/agent-cloud/${encodeURIComponent(args[0])}/${spec.path}/${encodeURIComponent(args[2])}`,
@@ -373,10 +495,14 @@ export function registerAgentCloud(program: Command): void {
             'Nothing to change. Example: workser agent-cloud set <id> system_prompt="Always check stock first"',
           );
         }
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}`, {
-          method: "PATCH",
-          body,
-        });
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}`,
+          {
+            method: "PATCH",
+            body,
+          },
+        );
         ok(res, () => {
           line(pc.green("Saved."));
           line(
@@ -408,7 +534,9 @@ export function registerAgentCloud(program: Command): void {
 
   cloud
     .command("triggers <agentId>")
-    .description("What starts this agent — schedules, chat channels, app events")
+    .description(
+      "What starts this agent — schedules, chat channels, app events",
+    )
     .action(
       action(async ({ ctx, args }) => {
         const res = await api(
@@ -419,7 +547,9 @@ export function registerAgentCloud(program: Command): void {
         ok(res, () => {
           if (!items.length) {
             return line(
-              pc.dim("Nothing starts this agent yet — it only runs when asked."),
+              pc.dim(
+                "Nothing starts this agent yet — it only runs when asked.",
+              ),
             );
           }
           for (const t of items) {
@@ -442,24 +572,21 @@ export function registerAgentCloud(program: Command): void {
   cloud
     .command("trigger-add <agentId> <kind> [pairs...]")
     .description(
-      'Start an agent on a schedule, a chat channel or an app event. ' +
-        'kind is schedule | chat | app_event. e.g. trigger-add <id> chat app_type=line',
+      "Start an agent on a schedule, a chat channel or an app event. " +
+        "kind is schedule | chat | app_event. e.g. trigger-add <id> chat app_type=line",
     )
     .action(
       action(async ({ ctx, args }) => {
         const kind = String(args[1]);
-        const pairs = parsePairs(
-          (args[2] as unknown as string[]) ?? [],
-          [
-            "name",
-            "rule",
-            "cron",
-            "timezone",
-            "app_type",
-            "event_type",
-            "connected_account_id",
-          ],
-        );
+        const pairs = parsePairs((args[2] as unknown as string[]) ?? [], [
+          "name",
+          "rule",
+          "cron",
+          "timezone",
+          "app_type",
+          "event_type",
+          "connected_account_id",
+        ]);
 
         const body = buildTriggerBody(kind, pairs);
         const res = await api(
@@ -560,16 +687,24 @@ export function registerAgentCloud(program: Command): void {
 
   cloud
     .command("publish <agentId>")
-    .description("Put the current setup live — nothing takes effect until this runs")
+    .description(
+      "Put the current setup live — nothing takes effect until this runs",
+    )
     .option("--note <text>", "What changed, for the version history")
     .action(
       action(async ({ ctx, args, opts }) => {
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/publish`, {
-          method: "POST",
-          body: { changelog: opts.note },
-        });
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/publish`,
+          {
+            method: "POST",
+            body: { changelog: opts.note },
+          },
+        );
         ok(res, () =>
-          line(pc.green(`Live${res?.version ? ` — version ${res.version}` : ""}.`)),
+          line(
+            pc.green(`Live${res?.version ? ` — version ${res.version}` : ""}.`),
+          ),
         );
       }),
     );
@@ -579,10 +714,14 @@ export function registerAgentCloud(program: Command): void {
     .description("Run the current setup WITHOUT publishing it")
     .action(
       action(async ({ ctx, args }) => {
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/test-runs`, {
-          method: "POST",
-          body: { input: { message: args[1] } },
-        });
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/test-runs`,
+          {
+            method: "POST",
+            body: { input: { message: args[1] } },
+          },
+        );
         ok(res, () => {
           line(pc.green("Trying it — nothing has gone live."));
           if (res?.run_id) {
@@ -594,7 +733,6 @@ export function registerAgentCloud(program: Command): void {
         });
       }),
     );
-
 
   /**
    * WHAT HAS BEEN PUT LIVE, and when.
@@ -608,13 +746,17 @@ export function registerAgentCloud(program: Command): void {
     .description("Every published version of this agent, newest first")
     .action(
       action(async ({ ctx, args }) => {
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/versions`);
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/versions`,
+        );
         const rows = Array.isArray(res) ? res : (res?.versions ?? []);
         ok(rows, () => {
           if (!rows.length) {
             return line(
-              pc.dim("Never published. Nothing this agent does is live yet — ") +
-                pc.bold(`workser agent-cloud publish ${args[0]}`),
+              pc.dim(
+                "Never published. Nothing this agent does is live yet — ",
+              ) + pc.bold(`workser agent-cloud publish ${args[0]}`),
             );
           }
           for (const v of rows) {
@@ -642,10 +784,14 @@ export function registerAgentCloud(program: Command): void {
     .description("Make an earlier published version live again")
     .action(
       action(async ({ ctx, args }) => {
-        const res = await api(ctx, `/v1/agent-cloud/${encodeURIComponent(args[0])}/rollback`, {
-          method: "POST",
-          body: { version: Number(args[1]) },
-        });
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/${encodeURIComponent(args[0])}/rollback`,
+          {
+            method: "POST",
+            body: { version: Number(args[1]) },
+          },
+        );
         ok(res, () => line(pc.green(`Rolled back to version ${args[1]}.`)));
       }),
     );
@@ -670,8 +816,13 @@ export function registerAgentCloud(program: Command): void {
    */
   cloud
     .command("workspace <agentId>")
-    .description("Where this agent's Dockerfile and scripts live on this computer")
-    .option("--pull", "Fetch the repo into it (needed once, before the first edit)")
+    .description(
+      "Where this agent's Dockerfile and scripts live on this computer",
+    )
+    .option(
+      "--pull",
+      "Fetch the repo into it (needed once, before the first edit)",
+    )
     .option("--name <name>", "The agent's name, for a readable folder")
     .action(
       action(async ({ ctx, args, opts }) => {
@@ -739,7 +890,10 @@ export function registerAgentCloud(program: Command): void {
       "--kind <kind>",
       "text | image | video | speech | transcription | embedding (comma-separated)",
     )
-    .option("--accepts <inputs>", "Only models that can read this: image, audio, video, file")
+    .option(
+      "--accepts <inputs>",
+      "Only models that can read this: image, audio, video, file",
+    )
     .action(
       action(async ({ ctx, opts }) => {
         const q = new URLSearchParams();
@@ -756,15 +910,20 @@ export function registerAgentCloud(program: Command): void {
           ctx,
           `/v1/agent-cloud/catalog/models/gateways${suffix}`,
         );
-        const models = (res?.models ?? []).filter(
-          (m: any) => opts.all || m.credit_tier === "PLATFORM_CREDITS",
-        );
+        const models = (res?.models ?? [])
+          // Temporary product gate. Core API filters these too, but the local
+          // builder must stay safe while talking to an older deployment.
+          .filter(
+            (m: any) =>
+              m.provider !== "vercel_ai_gateway" && m.gateway !== "vercel",
+          )
+          .filter((m: any) => opts.all || m.credit_tier === "PLATFORM_CREDITS");
         ok(res, () => {
           if (!models.length) {
             warn(
               opts.kind
                 ? `No ${opts.kind} models are available on your credits. Try --all.`
-                : "The live model list could not be read.",
+                : "No selectable models are available right now.",
             );
             return;
           }
@@ -780,8 +939,11 @@ export function registerAgentCloud(program: Command): void {
                   ? `$${m.input_price_per_million_usd.toFixed(2)}/M in`
                   : "price unknown";
             const byok =
-              m.credit_tier === "PLATFORM_CREDITS" ? "" : pc.yellow("  needs your own key");
-            const kind = m.kind && m.kind !== "text" ? pc.dim(`  [${m.kind}]`) : "";
+              m.credit_tier === "PLATFORM_CREDITS"
+                ? ""
+                : pc.yellow("  needs your own key");
+            const kind =
+              m.kind && m.kind !== "text" ? pc.dim(`  [${m.kind}]`) : "";
             line(`${pc.bold(m.model ?? m.id)}${kind}  ${pc.dim(price)}${byok}`);
           }
         });
@@ -799,7 +961,11 @@ export function registerAgentCloud(program: Command): void {
 function printRun(run: any, compact = false): void {
   const status = String(run?.status ?? "").toLowerCase();
   const colour =
-    status === "completed" ? pc.green : status === "failed" ? pc.red : pc.yellow;
+    status === "completed"
+      ? pc.green
+      : status === "failed"
+        ? pc.red
+        : pc.yellow;
   line(
     `${colour(status || "unknown")}  ${pc.bold(run?.id ?? "")}` +
       (run?.duration_ms ? `  ${pc.dim(formatDuration(run.duration_ms))}` : ""),
@@ -829,7 +995,11 @@ function printRun(run: any, compact = false): void {
   }
   if (!compact && run?.output) {
     line("");
-    line(typeof run.output === "string" ? run.output : JSON.stringify(run.output, null, 2));
+    line(
+      typeof run.output === "string"
+        ? run.output
+        : JSON.stringify(run.output, null, 2),
+    );
   }
   if (run?.error?.message) line("  " + pc.red(run.error.message));
 }
@@ -840,7 +1010,6 @@ function formatDuration(ms: number): string {
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   return `${minutes}m ${seconds % 60}s`;
-
 }
 
 /**
@@ -852,7 +1021,10 @@ function formatDuration(ms: number): string {
  * dropped, and reported as success — leaving an agent that had been told
  * nothing with nothing anywhere saying so.
  */
-function parsePairs(pairs: string[], allowed: string[]): Record<string, string> {
+function parsePairs(
+  pairs: string[],
+  allowed: string[],
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const raw of pairs) {
     const at = raw.indexOf("=");
@@ -862,7 +1034,9 @@ function parsePairs(pairs: string[], allowed: string[]): Record<string, string> 
     const key = raw.slice(0, at).trim();
     const value = raw.slice(at + 1);
     if (!allowed.includes(key)) {
-      throw new Error(`"${key}" is not a field here. Accepted: ${allowed.join(", ")}`);
+      throw new Error(
+        `"${key}" is not a field here. Accepted: ${allowed.join(", ")}`,
+      );
     }
     if (value) out[key] = value;
   }
@@ -937,5 +1111,7 @@ function buildTriggerBody(
     };
   }
 
-  throw new Error(`Unknown kind "${kind}". One of: schedule | chat | app_event`);
+  throw new Error(
+    `Unknown kind "${kind}". One of: schedule | chat | app_event`,
+  );
 }

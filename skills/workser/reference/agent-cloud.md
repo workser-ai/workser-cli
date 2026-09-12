@@ -8,12 +8,12 @@ commands: [agent-cloud]
 # Ship an agent inside the app
 
 `workser agent-cloud` creates an AI agent that runs on **Workser's**
-infrastructure, keeps its own memory and tools, and can be called from the web,
-mobile, API or Python apps in this project.
+infrastructure, keeps its own memory and tools, and can be called from this
+project's web, mobile, API or Python apps.
 
 **This is not `workser agent`.** That one hands a subtask to a coding agent on
-this machine — a teammate helping you build. This one is a thing the project
-*ships*: it works for the user after you are gone.
+this machine — a teammate helping you build. This one the project *ships*: it
+works for the user after you are gone.
 
 ```
 workser agent-cloud list
@@ -39,14 +39,16 @@ workser agent-cloud add <id> tool display_name="Send email" provider="gmail" \
                              provider_tool_id="GMAIL_SEND_EMAIL"
 workser agent-cloud add <id> secret key="STRIPE_KEY" value="..."
 workser agent-cloud add <id> subagent subagent_id=<otherId> name="researcher"
+workser agent-cloud add <id> api  name=check_stock url="https://..." ...
 workser agent-cloud get <id> skill          # what it has
 workser agent-cloud remove <id> skill <itemId>
 ```
 
-`add` takes `key=value` pairs and REFUSES a field it does not know, rather than
-sending it. That matters: the API silently drops unknown fields, so a typo
-would otherwise be accepted, dropped, and reported as success — leaving an
-agent that had been told nothing.
+`api` turns an HTTP call into a tool: `workser help agent-cloud-api-calls`.
+
+`add` takes `key=value` pairs and REFUSES a field it does not know. That
+matters: the API silently drops unknown fields, so a typo would otherwise be
+reported as success — leaving an agent that had been told nothing.
 
 ## Nothing starts it until you give it a trigger
 
@@ -184,8 +186,8 @@ for await (const event of workser.agents.stream(run.id)) {
 }
 ```
 
-`stream()` reconnects itself through dropped connections, so the person
-watching sees the agent think. See the `workser-sdk` skill, `reference/agents.md`.
+`stream()` reconnects through dropped connections, so the person watching sees
+the agent think. See the `workser-sdk` skill, `reference/agents.md`.
 
 ## Things that will bite you
 
@@ -193,10 +195,9 @@ watching sees the agent think. See the `workser-sdk` skill, `reference/agents.md
    a per-run fee — so a loop that starts agents is a loop that spends. Cancel
    what you abandon: `workser agent-cloud runs <runId>` shows the cost.
 
-2. **Instructions are the product.** The agent does what its instructions say,
-   in the user's own words. Write them the way you would brief a new colleague:
-   what to do, what to leave alone, when to ask. Vague instructions are the
-   single biggest cause of an agent that "doesn't work".
+2. **Instructions are the product.** Write them the way you would brief a new
+   colleague: what to do, what to leave alone, when to ask. Vague instructions
+   are the single biggest cause of an agent that "doesn't work".
 
 3. **Every plan can run agents once the shared wallet has enough credits.** A
    `402` with `insufficient_credits` needs a top-up; `spend_limit_reached` means
