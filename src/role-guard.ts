@@ -62,14 +62,39 @@ import { WorkserError } from "./errors.js";
  * owner's single decision in this product, and an agent that can approve the
  * plan it just wrote has removed the only gate the whole design rests on.
  *
+ * There is one narrow DELEGATION of that decision, not an exception to it: a
+ * project-channel manager may RECORD an approval the owner just expressed in
+ * that channel turn. Orbit marks only that live, user-origin turn with
+ * WORKSER_OWNER_DELEGATED_APPROVAL=1. This is the conversational equivalent
+ * of the owner pressing Continue; it still calls the same approval endpoint,
+ * and a planning turn or dispatched teammate never receives the marker.
+ *
  * NO ROLE MEANS NO LIMIT, still. The CLI is also run by hand and from the
  * manager's own turn, and neither is a dispatched subagent.
  */
 
 /** Refused for every agent, whatever its role — see the note above. */
 const NEVER: Record<string, string> = {
-  "task approval": "Only the owner can approve a plan.",
+  "task approval":
+    "Only the owner can approve a plan. A project manager may only record approval from the owner's current channel message.",
 };
+
+/**
+ * Whether this PM is acting as the owner's hand for the message being handled.
+ *
+ * All three facts matter. `WORKSER_ROLE=pm` alone also names planning turns;
+ * channel provenance alone could be inherited by a non-manager; and the
+ * explicit marker is written after user-configured environment variables so a
+ * role's Advanced settings cannot accidentally grant the capability.
+ */
+function mayRecordOwnerTaskDecision(role: string): boolean {
+  return (
+    role === "pm" &&
+    process.env.WORKSER_OWNER_DELEGATED_APPROVAL === "1" &&
+    !!process.env.WORKSER_PROJECT_CHANNEL_ID?.trim() &&
+    !!process.env.WORKSER_PROJECT_CHANNEL_MESSAGE_ID?.trim()
+  );
+}
 
 export function assertRoleMayRun(argv: string[]): void {
   // Still keyed on being a dispatched agent at all: a person at a terminal is
@@ -82,12 +107,17 @@ export function assertRoleMayRun(argv: string[]): void {
 
   const pair = `${commandArgv[0]} ${commandArgv[1] ?? ""}`.trim();
   // `approval request` only READS — it tells the owner the plan is ready. The
-  // two that decide are the ones no agent may run.
+  // two that decide remain owner-only, except when the channel PM is recording
+  // the decision from the owner's current message (see the helper above).
+  const approvalAction = commandArgv[2];
   if (
     NEVER[pair] &&
     !(
       pair === "task approval" &&
-      (commandArgv[2] === "request" || !commandArgv[2])
+      (approvalAction === "request" ||
+        !approvalAction ||
+        ((approvalAction === "approve" || approvalAction === "decline") &&
+          mayRecordOwnerTaskDecision(role)))
     )
   ) {
     throw new WorkserError(NEVER[pair], { code: "role_forbidden" });

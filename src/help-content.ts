@@ -101,6 +101,33 @@ tools goes to an agent.
 `,
   },
   {
+    topic: "agent-cloud-workspace",
+    title: "Agent Cloud workspace and files",
+    summary: "Understand and verify the private E2B workspace every cloud agent receives by default.",
+    commands: ["agent-cloud"],
+    source: "skills/workser/reference/agent-cloud-workspace.md",
+    body: `# Agent Cloud workspace and files
+
+Workspace and file tools are part of the Agent Cloud baseline. A newly created
+agent can read, write and list files, and run validation commands in its private
+E2B workspace without an external tool binding or hidden capability flag. The
+workspace starts lazily on the first file or command operation, so a run that
+only answers a question does not start or bill a sandbox.
+
+Do not report “no tools” merely because \`get <id> tool\` returns an empty list.
+That command lists connected external actions; \`read_file\`, \`write_file\`,
+\`list_files\` and \`run_command\` are built into the runtime and appear in the
+run's tool steps. When file work is required, ask the agent to create, read back
+and validate a small file before declaring the setup ready.
+
+The repo and Dockerfile managed by \`workspace\` define the agent's machine image.
+The folder on this computer is only that configuration checkout; it is not the
+temporary \`/home/user/work\` directory used inside an E2B run. An empty or
+unpushed local checkout therefore does not prove that the cloud agent lacks a
+runtime workspace.
+`,
+  },
+  {
     topic: "agent-cloud",
     title: "Ship an agent inside the app",
     summary: "Create an AI agent that runs on Workser and can be called from this project's apps.",
@@ -174,9 +201,9 @@ A \`try\` runs the draft, costs the same as a real run, and changes nothing that
 customers can reach.
 
 Once published, \`versions\` shows what is live and \`rollback\` is the only way
-back. The machine an agent runs on is a repo — the Dockerfile its sandbox is
-built from — in a folder on this computer; \`workspace\` prepares that folder and
-\`--pull\` fetches it, which is needed once before the first edit.
+back. Every agent has lazy file and command tools in private E2B; an empty tool
+list or local checkout does not mean no runtime workspace. Read
+\`workser help agent-cloud-workspace\` before editing its machine definition.
 
 \`\`\`
 workser agent-cloud versions <id>
@@ -1520,9 +1547,10 @@ workser goal create "Launch checkout" \\
   --outcome "A customer can buy something and get a receipt"
 \`\`\`
 
-\`--phase\` needs 2–6 names. Propose the shape only — nothing is created until the
-owner agrees it; planning phase four now is waste, since it will change once
-phase one is real.
+\`--phase\` needs 2–6 names. The goal is AI-managed project tracking, not another
+approval request for the owner. Create the shape, then file the current phase's
+task plan; later phases stay as names until their turn because their detail will
+change once the earlier work is real.
 
 ## Phase one is the product, not the foundations
 
@@ -1565,8 +1593,8 @@ show\` prints it back as a standing instruction:
 - \`foundations\` — phase one settles the hard parts first, right for a port or a
   fixed external contract
 
-Propose \`product\` unless the owner has said otherwise; they change it on the
-plan card, and it is the shape of the plan, so read it before filing a phase.
+Use \`product\` unless the owner has said otherwise. The AI team manages this
+setting with \`workser goal update\`, so read it before filing a phase.
 
 ### A bot is not a deliverable; a bot you can watch is
 
@@ -1596,7 +1624,7 @@ than plumbing: plumbing under-reports progress, demoware over-reports it. If
 the path can't be made real inside phase one, make phase one *smaller*, not
 faker.
 
-## Acceptance criteria are agreed with the shape
+## Acceptance criteria are recorded with the shape
 
 \`--criteria\` maps each phase name to the owner's own sentences about what "done"
 means for it, e.g. \`'{"Payment":["A customer can pay by card and gets a receipt"]}'\`.
@@ -1620,7 +1648,7 @@ workser task create "Build the payment form" --goal g_123 --phase Payment
 \`\`\`
 
 A goal's apps and progress are derived from the tasks that join it, not declared
-up front — most of the apps a goal will touch don't exist when it's proposed.
+up front — most of the apps a goal will touch don't exist when tracking starts.
 `,
   },
   {
@@ -2249,7 +2277,22 @@ the command records them and posts the new task card as a Project Manager messag
 automatically. Do not invent or ask for those IDs.
 
 Opening a task does **not** approve it or start implementation. The task remains
-awaiting the owner. Never approve or dispatch a task you opened yourself.
+awaiting the owner. Never approve or dispatch a task you opened yourself in the
+same turn.
+
+In a later project-channel turn, an explicit instruction from the owner to
+approve, start, continue, proceed, go ahead or do the current/named task is the
+owner's decision. Record it, then start the task through the normal gate:
+
+\`\`\`bash
+workser task approval approve --task <task-id> --note "Approved by the owner in this channel"
+workser task start <task-id>
+\`\`\`
+
+Do not infer approval from praise, a status question or casual discussion. If
+the message could refer to more than one waiting task, ask which one. Never tell
+the owner to open the task tab or press Continue after they already told you to
+proceed.
 
 ## Planning a task
 
@@ -2286,7 +2329,9 @@ workser task can-start
 
 This exits non-zero, with the reason, until they have approved the plan — that
 refusal is the product working, not an error to route around. Ask with
-\`workser task approval request\`; only a person can answer.
+\`workser task approval request\`. The owner can answer in the task controls or
+explicitly tell the project manager in a later channel message; both must be
+recorded through the same approval endpoint.
 
 ## Finishing a step
 

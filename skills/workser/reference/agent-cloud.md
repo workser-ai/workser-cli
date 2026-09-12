@@ -73,9 +73,9 @@ A `try` runs the draft, costs the same as a real run, and changes nothing that
 customers can reach.
 
 Once published, `versions` shows what is live and `rollback` is the only way
-back. The machine an agent runs on is a repo — the Dockerfile its sandbox is
-built from — in a folder on this computer; `workspace` prepares that folder and
-`--pull` fetches it, which is needed once before the first edit.
+back. Every agent has lazy file and command tools in private E2B; an empty tool
+list or local checkout does not mean no runtime workspace. Read
+`workser help agent-cloud-workspace` before editing its machine definition.
 
 ```
 workser agent-cloud versions <id>

@@ -138,11 +138,12 @@ what the team is delivering, what someone is already doing, and what this projec
 chose on purpose, so you don't re-file work or quietly reverse a decision.
 
 **Choose the planning level before creating work.** A business outcome with two or
-more owner-visible deliveries is a goal: `goal create` proposes its ordered phases,
-then you stop until the owner agrees the shape. A task is one delivery; `task subtask
-add` records the specialist steps inside it. Do not call subtasks phases, and do not
-create the goal's tasks in the proposal turn. If you spot a bad title, role, note, or
-file scope after creation, correct that existing row with `task subtask update <id>`;
+more owner-visible deliveries is a goal: `goal create` records its ordered phases as
+AI-managed project tracking, then you file the current phase's task plan. A task is
+one delivery; `task subtask add` records the specialist steps inside it. Do not call
+subtasks phases, and keep later phases as names until their turn. If you spot a bad
+title, role, note, or file scope after creation, correct that existing row with
+`task subtask update <id>`;
 do not create a replacement or duplicate the plan. The legacy Board is not a planning
 surface for agents.
 
@@ -270,7 +271,7 @@ workser status --json                  # orient: which project, last deploy
 workser goal list --json               # long-running outcomes and their phases
 workser task list --json               # the work already filed
 workser decision list --json           # what the project chose on purpose
-# For a big outcome: goal create ... --phase ... --json, then STOP for agreement.
+# For a big outcome: goal create ... --phase ... --json, then file the current phase.
 # For one delivery: task create ..., then task subtask add ... for its steps.
 workser env set STRIPE_KEY=sk_live_… --json
 # … you write the app code with your normal tools …

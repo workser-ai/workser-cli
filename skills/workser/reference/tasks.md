@@ -48,7 +48,22 @@ the command records them and posts the new task card as a Project Manager messag
 automatically. Do not invent or ask for those IDs.
 
 Opening a task does **not** approve it or start implementation. The task remains
-awaiting the owner. Never approve or dispatch a task you opened yourself.
+awaiting the owner. Never approve or dispatch a task you opened yourself in the
+same turn.
+
+In a later project-channel turn, an explicit instruction from the owner to
+approve, start, continue, proceed, go ahead or do the current/named task is the
+owner's decision. Record it, then start the task through the normal gate:
+
+```bash
+workser task approval approve --task <task-id> --note "Approved by the owner in this channel"
+workser task start <task-id>
+```
+
+Do not infer approval from praise, a status question or casual discussion. If
+the message could refer to more than one waiting task, ask which one. Never tell
+the owner to open the task tab or press Continue after they already told you to
+proceed.
 
 ## Planning a task
 
@@ -85,7 +100,9 @@ workser task can-start
 
 This exits non-zero, with the reason, until they have approved the plan — that
 refusal is the product working, not an error to route around. Ask with
-`workser task approval request`; only a person can answer.
+`workser task approval request`. The owner can answer in the task controls or
+explicitly tell the project manager in a later channel message; both must be
+recorded through the same approval endpoint.
 
 ## Finishing a step
 

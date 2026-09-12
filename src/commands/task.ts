@@ -30,7 +30,9 @@ import type { Goal } from "./goal.js";
  * approved, and this command relays that verbatim — an agent that wants to
  * start a subtask has to ask, and being told no is the expected outcome, not an
  * error to work around. `approval request` exists so the manager can say it is
- * ready; only a person can answer.
+ * ready. The owner answers either with the task controls or by explicitly
+ * telling the project manager in the current channel turn; the manager only
+ * records that answer and still goes through the same approval endpoint.
  *
  * Literal status/role values are mirrored from the desktop's
  * `project-tasks.ts` rather than imported — this CLI has no build-time
@@ -186,6 +188,8 @@ interface ProjectTask {
   labels: string[];
   agent_type: string | null;
   agent_model: string | null;
+  /** `10m | 30m | 45m | 1h | 1h+`, or null when nobody sized it. */
+  estimate: string | null;
   result_summary: string | null;
   targets: TaskTarget[];
   subtaskTotal: number;
@@ -470,12 +474,38 @@ export function registerTask(program: Command): void {
     )
     .option("--model <id>", "the model that CLI should use for this step")
     .option("--effort <level>", `how hard it thinks (${EFFORTS.join(" | ")})`)
+    /**
+     * HOW LONG THIS STEP SHOULD TAKE — and the reason it is on the STEP and
+     * not only on the task.
+     *
+     * `task create` has had this flag since migration 159 and `subtask add`
+     * never did, so every step ever dispatched was unsized. The desktop reads
+     * it now (see `project-task-runner.ts`'s `stepBudget`): a sized step is
+     * told its own budget in its prompt and gets a watchdog ceiling scaled to
+     * it, instead of the flat ninety minutes a ten-minute copy change used to
+     * share with a one-hour migration.
+     *
+     * It deliberately does NOT fall back to the parent's estimate over there.
+     * A task sized `1h` split into four steps would hand each of them an hour;
+     * the parent's number is the size of the whole job and says nothing about
+     * any one share. So a step nobody sizes here stays unsized, and the
+     * budget stays quiet rather than confidently wrong.
+     */
+    .option(
+      "--estimate <value>",
+      `roughly how long THIS step should take (${ESTIMATES.join(" | ")})`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         const parent = resolveTaskId(ctx, opts.task);
         if (opts.role !== undefined) assertOneOf("--role", opts.role, ROLES);
         if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
         if (opts.agent !== undefined) assertOneOf("--agent", opts.agent, AGENTS);
+        // Loud rather than silent, exactly as on `task create`: an unrecognised
+        // bucket would be stored, drawn on a card as raw text, and read by the
+        // step budget as "unsized" — three different wrongs from one typo.
+        if (opts.estimate !== undefined)
+          assertOneOf("--estimate", opts.estimate, ESTIMATES);
         if (opts.effort !== undefined)
           assertOneOf("--effort", opts.effort, EFFORTS);
         // The price gate — see `model-policy.ts`. Refused here, where whoever
@@ -494,6 +524,7 @@ export function registerTask(program: Command): void {
             summary: opts.note,
             role: opts.role,
             category: opts.kind,
+            estimate: opts.estimate,
             scopePaths: opts.scope,
             // What to read before doing it. Parsed here rather than pushed at
             // the API so a malformed pointer is dropped where the agent can
@@ -542,6 +573,7 @@ export function registerTask(program: Command): void {
             `${pc.green("added")} ${pc.bold(row.title)}  ${pc.dim(row.key ?? row.id)}`,
           );
           if (row.role) line(pc.dim(`role: ${row.role}`));
+          if (row.estimate) line(pc.dim(`estimate: ${row.estimate}`));
           if (runner) {
             line(
               pc.dim(
@@ -597,10 +629,20 @@ export function registerTask(program: Command): void {
       "--effort <level>",
       `how hard it thinks (${EFFORTS.join(" | ")}); "default" clears it`,
     )
+    .option(
+      "--estimate <value>",
+      `roughly how long THIS step should take (${ESTIMATES.join(" | ")}); "default" clears it`,
+    )
     .action(
       action(async ({ ctx, args, opts }) => {
         if (opts.role !== undefined) assertOneOf("--role", opts.role, ROLES);
         if (opts.kind !== undefined) assertOneOf("--kind", opts.kind, KINDS);
+        // RE-SIZING IS THE POINT OF HAVING IT HERE. A step that turned out to
+        // be bigger than the plan thought is exactly the case the runner asks
+        // the agent to report — and a manager that cannot then correct the
+        // number would be recording the estimate it already knows is wrong.
+        if (opts.estimate !== undefined && opts.estimate !== "default")
+          assertOneOf("--estimate", opts.estimate, ESTIMATES);
         // `default` is the word for "stop overriding", and it sends `null` —
         // which is what the API reads as "hand this back to the role". Without
         // it an override could be set and never taken off from here.
@@ -624,6 +666,7 @@ export function registerTask(program: Command): void {
               summary: opts.note,
               role: opts.role,
               category: opts.kind,
+              estimate: clearable(opts.estimate),
               scopePaths: opts.scope,
               // Only sent when `--ref` was actually given: the PATCH replaces
               // the whole list, so passing `[]` for an untouched flag would
@@ -857,10 +900,11 @@ export function registerTask(program: Command): void {
         const id = resolveTaskId(ctx, opts.task);
         const what = args[0];
 
-        // An agent CANNOT approve its own plan. `request` is the only verb it
-        // should ever reach for; the other two exist because this CLI is also
-        // how a person automates their own decisions, and refusing them here
-        // would just mean writing curl by hand.
+        // An agent CANNOT approve its own plan. `request` is the normal verb;
+        // approve/decline also exist for a person automating their own decision
+        // and for the narrowly-marked project manager recording the owner's
+        // explicit answer from the current channel turn. `role-guard.ts`
+        // enforces that boundary before Commander reaches this handler.
         if (what === "request") {
           const row = await api<TaskDetail>(
             ctx,

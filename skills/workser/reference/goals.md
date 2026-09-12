@@ -39,9 +39,10 @@ workser goal create "Launch checkout" \
   --outcome "A customer can buy something and get a receipt"
 ```
 
-`--phase` needs 2–6 names. Propose the shape only — nothing is created until the
-owner agrees it; planning phase four now is waste, since it will change once
-phase one is real.
+`--phase` needs 2–6 names. The goal is AI-managed project tracking, not another
+approval request for the owner. Create the shape, then file the current phase's
+task plan; later phases stay as names until their turn because their detail will
+change once the earlier work is real.
 
 ## Phase one is the product, not the foundations
 
@@ -84,8 +85,8 @@ show` prints it back as a standing instruction:
 - `foundations` — phase one settles the hard parts first, right for a port or a
   fixed external contract
 
-Propose `product` unless the owner has said otherwise; they change it on the
-plan card, and it is the shape of the plan, so read it before filing a phase.
+Use `product` unless the owner has said otherwise. The AI team manages this
+setting with `workser goal update`, so read it before filing a phase.
 
 ### A bot is not a deliverable; a bot you can watch is
 
@@ -115,7 +116,7 @@ than plumbing: plumbing under-reports progress, demoware over-reports it. If
 the path can't be made real inside phase one, make phase one *smaller*, not
 faker.
 
-## Acceptance criteria are agreed with the shape
+## Acceptance criteria are recorded with the shape
 
 `--criteria` maps each phase name to the owner's own sentences about what "done"
 means for it, e.g. `'{"Payment":["A customer can pay by card and gets a receipt"]}'`.
@@ -139,4 +140,4 @@ workser task create "Build the payment form" --goal g_123 --phase Payment
 ```
 
 A goal's apps and progress are derived from the tasks that join it, not declared
-up front — most of the apps a goal will touch don't exist when it's proposed.
+up front — most of the apps a goal will touch don't exist when tracking starts.

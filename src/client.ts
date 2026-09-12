@@ -86,6 +86,81 @@ export interface RequestOpts {
  * Allowed-but-gated actions may return HTTP 423 { code: "awaiting_approval" }
  * while the daemon waits for the user to approve in the Orbit UI.
  */
+/**
+ * THE DAEMON GOING AWAY FOR A SECOND IS NOT A FAILED COMMAND.
+ *
+ * ─── WHAT THE OWNER SAW ──────────────────────────────────────────────────────
+ *
+ * A red X on `Check what done means` in the middle of a task that was working,
+ * saying "Can't reach Workser Orbit (local daemon). Is the app running?" — while
+ * the app was plainly running, because the agent printing that message was
+ * itself running inside it.
+ *
+ * ─── WHY IT HAPPENS ──────────────────────────────────────────────────────────
+ *
+ * The daemon owns a unix socket at `~/.workser/orbit.sock`, and it unlinks and
+ * recreates it every time the app restarts — a rebuild in development, an
+ * update, a crash-and-relaunch. An agent turn OUTLIVES that: it was spawned by
+ * the old daemon and keeps running. Any `workser ...` call landing inside that
+ * window got ECONNREFUSED, and ONE attempt was all there was, so a gap of a
+ * second or two became a permanently recorded failed step.
+ *
+ * ─── WHY RETRYING IS SAFE HERE, AND EXACTLY WHERE IT IS NOT ──────────────────
+ *
+ * A retry is only safe if the first attempt cannot have been ACTED ON. Two
+ * cases, and the distinction is the whole design:
+ *
+ *   THE CONNECTION NEVER OPENED - ENOENT (socket file gone), ECONNREFUSED
+ *   (nothing listening yet). The request was never sent, so nothing happened,
+ *   so sending it again cannot happen twice. Safe for ANY method, including the
+ *   POSTs that create tasks and file artifacts.
+ *
+ *   THE CONNECTION OPENED AND THEN BROKE - ECONNRESET, EPIPE. The daemon may
+ *   have received and acted on the request before dying. Retried for GET only,
+ *   which is idempotent by definition; a POST is left to fail, because filing
+ *   the same artifact twice is worse than telling the owner.
+ *
+ * Anything else never reaches here: this wraps the TRANSPORT only, and an HTTP
+ * 404 is an answer, not a failure to connect.
+ */
+const RECONNECT_DELAYS_MS = [150, 400, 900, 1500];
+
+/** Errno codes meaning the request was never delivered. */
+const NEVER_DELIVERED = new Set(["ENOENT", "ECONNREFUSED", "EAGAIN"]);
+/** Errno codes meaning it may have been delivered before the socket died. */
+const MAYBE_DELIVERED = new Set(["ECONNRESET", "EPIPE", "ECONNABORTED"]);
+
+function errnoOf(e: unknown): string {
+  const code = (e as NodeJS.ErrnoException | undefined)?.code;
+  if (typeof code === "string") return code;
+  // `fetch` wraps the real cause; unix-socket errors arrive bare.
+  const cause = (e as { cause?: NodeJS.ErrnoException })?.cause?.code;
+  return typeof cause === "string" ? cause : "";
+}
+
+export async function withReconnect<T>(
+  attempt: () => Promise<T>,
+  method: string,
+  sleep: (ms: number) => Promise<void> = (ms) =>
+    new Promise((r) => setTimeout(r, ms)),
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i <= RECONNECT_DELAYS_MS.length; i++) {
+    try {
+      return await attempt();
+    } catch (e) {
+      last = e;
+      const code = errnoOf(e);
+      const retryable =
+        NEVER_DELIVERED.has(code) ||
+        (MAYBE_DELIVERED.has(code) && method === "GET");
+      if (!retryable || i === RECONNECT_DELAYS_MS.length) break;
+      await sleep(RECONNECT_DELAYS_MS[i]);
+    }
+  }
+  throw last;
+}
+
 export async function api<T = any>(
   ctx: Context,
   path: string,
@@ -142,26 +217,30 @@ export async function api<T = any>(
   const method = opts.method ?? (opts.body !== undefined ? "POST" : "GET");
   const bodyText = opts.body !== undefined ? JSON.stringify(opts.body) : undefined;
 
-  let res: Reply;
-  try {
+  /** One delivery attempt. Retried by `withReconnect` only when it is safe. */
+  const attempt = async (): Promise<Reply> => {
     if (ctx.socketPath) {
       if (bodyText !== undefined) {
         headers["content-length"] = String(Buffer.byteLength(bodyText));
       }
-      res = await requestOverSocket(ctx.socketPath, url.pathname + url.search, {
+      return requestOverSocket(ctx.socketPath, url.pathname + url.search, {
         method,
         headers,
         body: bodyText,
       });
-    } else {
-      const r = await fetch(url, { method, headers, body: bodyText });
-      res = {
-        ok: r.ok,
-        status: r.status,
-        statusText: r.statusText,
-        text: await r.text(),
-      };
     }
+    const r = await fetch(url, { method, headers, body: bodyText });
+    return {
+      ok: r.ok,
+      status: r.status,
+      statusText: r.statusText,
+      text: await r.text(),
+    };
+  };
+
+  let res: Reply;
+  try {
+    res = await withReconnect(attempt, method);
   } catch (e) {
     throw new WorkserError(
       ctx.mode === "daemon"

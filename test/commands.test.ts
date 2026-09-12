@@ -686,6 +686,81 @@ describe("project-channel PM task intake", () => {
     });
   });
 
+  /**
+   * SIZING A STEP, which is what makes the runner's budget real.
+   *
+   * `task create` has taken `--estimate` since migration 159; `subtask add`
+   * never did, so every step the manager ever filed was unsized — and the
+   * desktop's per-step budget read it, found null, and fell back to the same
+   * flat ninety-minute ceiling for a ten-minute copy change and a one-hour
+   * migration alike. The column and the API accepted it the whole time; only
+   * the flag was missing.
+   */
+  it("sizes a step when it is filed, so the runner can budget it", async () => {
+    const r = await cli([
+      "task",
+      "subtask",
+      "add",
+      "Build the upload screen",
+      "--task",
+      "33333333-3333-4333-8333-333333333333",
+      "--role",
+      "web",
+      "--estimate",
+      "30m",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.find("POST", "/v1/project-tasks")?.body).toMatchObject({
+      role: "web",
+      estimate: "30m",
+    });
+  });
+
+  it("refuses a bucket that is not one of the five, loudly", async () => {
+    // A typo stored here is three wrongs from one mistake: raw text on the
+    // card, a bucket no phase total can add up, and a step the budget reads as
+    // unsized. Fail where the writer can still choose again.
+    const r = await cli([
+      "task",
+      "subtask",
+      "add",
+      "Build the upload screen",
+      "--task",
+      "33333333-3333-4333-8333-333333333333",
+      "--estimate",
+      "half an hour",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).not.toBe(0);
+  });
+
+  it("lets the manager re-size a step that turned out bigger", async () => {
+    // The runner asks a step to STOP and say so when the work is materially
+    // bigger than its estimate. A manager that could not then correct the
+    // number would be leaving an estimate it already knows is wrong.
+    const subtaskId = "44444444-4444-4444-8444-444444444447";
+    const r = await cli([
+      "task",
+      "subtask",
+      "update",
+      subtaskId,
+      "--estimate",
+      "1h",
+      "--project",
+      "p_1",
+    ]);
+
+    expect(r.code).toBe(0);
+    expect(stub.find("PATCH", `/v1/project-tasks/${subtaskId}`)?.body).toEqual({
+      estimate: "1h",
+    });
+  });
+
   it("hands a step back to its role with `default`", async () => {
     // Without a word for "stop overriding", an override could be set from here
     // and never taken off again.
@@ -883,6 +958,71 @@ describe("project-channel PM task intake", () => {
     const r = await cli(
       ["task", "approval", "approve", "--task", "WORKS-42", "--project", "p_1"],
       { env: { WORKSER_ROLE: "pm" } },
+    );
+
+    expect(r.code).toBe(1);
+    expect(r.json.error.code).toBe("role_forbidden");
+    expect(stub.requests).toHaveLength(before);
+  });
+
+  it("lets a channel PM record the owner's explicit approval", async () => {
+    stub.overrides.set("POST /v1/project-tasks/WORKS-42/approval", {
+      body: {
+        id: "WORKS-42",
+        title: "Ship the report",
+        approval_state: "approved",
+      },
+    });
+    const r = await cli(
+      ["task", "approval", "approve", "--task", "WORKS-42", "--project", "p_1"],
+      {
+        env: {
+          WORKSER_ROLE: "pm",
+          WORKSER_OWNER_DELEGATED_APPROVAL: "1",
+          WORKSER_PROJECT_CHANNEL_ID: "channel-1",
+          WORKSER_PROJECT_CHANNEL_MESSAGE_ID: "message-1",
+        },
+      },
+    );
+
+    expect(r.code).toBe(0);
+    expect(stub.lastRequest).toMatchObject({
+      method: "POST",
+      path: "/v1/project-tasks/WORKS-42/approval",
+      body: { decision: "approved" },
+    });
+  });
+
+  it("does not trust channel provenance without the daemon delegation marker", async () => {
+    const before = stub.requests.length;
+    const r = await cli(
+      ["task", "approval", "approve", "--task", "WORKS-42", "--project", "p_1"],
+      {
+        env: {
+          WORKSER_ROLE: "pm",
+          WORKSER_PROJECT_CHANNEL_ID: "channel-1",
+          WORKSER_PROJECT_CHANNEL_MESSAGE_ID: "message-1",
+        },
+      },
+    );
+
+    expect(r.code).toBe(1);
+    expect(r.json.error.code).toBe("role_forbidden");
+    expect(stub.requests).toHaveLength(before);
+  });
+
+  it("does not let a dispatched teammate use a PM's delegated approval", async () => {
+    const before = stub.requests.length;
+    const r = await cli(
+      ["task", "approval", "approve", "--task", "WORKS-42", "--project", "p_1"],
+      {
+        env: {
+          WORKSER_ROLE: "web",
+          WORKSER_OWNER_DELEGATED_APPROVAL: "1",
+          WORKSER_PROJECT_CHANNEL_ID: "channel-1",
+          WORKSER_PROJECT_CHANNEL_MESSAGE_ID: "message-1",
+        },
+      },
     );
 
     expect(r.code).toBe(1);

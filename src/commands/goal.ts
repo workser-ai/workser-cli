@@ -140,19 +140,11 @@ export function registerGoal(program: Command): void {
       }),
     );
 
-  /**
-   * PROPOSE THE SHAPE, BEFORE ANY OF THE WORK.
-   *
-   * The first answer to a business request is a list of slices with names and
-   * an order, and nothing else. The owner agrees the SHAPE; the detail of each
-   * slice is planned when that slice starts. Planning phase four now is waste —
-   * it will change once phase one is real — and a twenty-five step approval is
-   * one nobody reads.
-   */
+  /** Create the tracking shape before filing the current phase's work. */
   goal
     .command("create <title>")
     .description(
-      "Propose a business goal and the phases that deliver it — the owner agrees the shape before any task exists",
+      "Create a business goal and the phases that track its delivery",
     )
     .option(
       "--outcome <text>",
@@ -188,11 +180,11 @@ export function registerGoal(program: Command): void {
         }
         if (phases.length > 6) {
           throw new WorkserError(
-            "More than six phases is a conversation, not a plan. Propose the first few and agree the rest as you go.",
+            "More than six phases is a conversation, not a useful tracker. Record the first few and refine the rest as the work moves forward.",
           );
         }
         /**
-         * CRITERIA ARE AGREED WITH THE SHAPE, not written afterwards.
+         * CRITERIA ARE RECORDED WITH THE SHAPE, not written afterwards.
          *
          * Written at the end they are a description of what got built. The
          * whole value is stating them while they can still change the plan —
@@ -221,7 +213,7 @@ export function registerGoal(program: Command): void {
 
         // Refused rather than coerced, and the refusal names the three: a
         // typo that silently became `all` would be a typo that ran unattended
-        // through work the owner never agreed to.
+        // through more work than the manager intended.
         if (opts.pace !== undefined && !PACES.includes(opts.pace)) {
           throw new WorkserError(
             `Unknown --pace "${opts.pace}". Use one of: ${PACES.join(", ")}.`,
@@ -256,11 +248,11 @@ export function registerGoal(program: Command): void {
           },
         });
         ok(row, () => {
-          success(`Proposed ${pc.bold(row?.title ?? "goal")}`);
+          success(`Tracking ${pc.bold(row?.title ?? "goal")}`);
           printGoal(row);
           line(
             pc.dim(
-              "\nNothing has been created yet. The owner agrees the shape first.",
+              "\nNow file the current phase's task plan; later phases stay as tracking names until their turn.",
             ),
           );
         });
