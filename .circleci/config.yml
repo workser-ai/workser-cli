@@ -34,7 +34,7 @@ jobs:
 workflows:
   verify-and-publish:
     jobs:
-      - verify:
+      - verify
       - publish:
           requires:
             - verify
