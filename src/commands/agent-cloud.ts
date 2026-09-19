@@ -1,4 +1,6 @@
 import type { Command } from "commander";
+import { writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { api } from "../client.js";
@@ -173,6 +175,48 @@ export function registerAgentCloud(program: Command): void {
             pc.dim("Follow it: ") +
               pc.bold(`workser agent-cloud runs ${res?.id ?? "<runId>"}`),
           );
+        });
+      }),
+    );
+
+  /**
+   * Get the file a run made.
+   *
+   * A run's files are served through a short-TTL pre-signed URL minted per
+   * request, so there is nothing to copy out of a listing and paste into curl
+   * ten minutes later — asking for it and saving it is one step or it is a
+   * broken link.
+   */
+  cloud
+    .command("artifact <artifactId>")
+    .description("Download a file a run produced")
+    .option("--out <path>", "Where to save it. Defaults to its own name.")
+    .action(
+      action(async ({ ctx, args, opts }) => {
+        const res = await api(
+          ctx,
+          `/v1/agent-cloud/artifacts/${encodeURIComponent(args[0])}/download`,
+        );
+        const url = res?.download_url ?? res?.url;
+        if (!url) {
+          warn("That file has no download address.");
+          return;
+        }
+        const response = await fetch(url);
+        if (!response.ok) {
+          warn(`That file could not be downloaded (${response.status}).`);
+          return;
+        }
+        const bytes = Buffer.from(await response.arrayBuffer());
+        // The pre-signed URL carries the object key, whose last segment is the
+        // filename we stored. Query string stripped first — saving a file
+        // called `report.pdf?X-Amz-Signature=…` is the kind of thing that
+        // works in a test and not on a real bucket.
+        const suggested = basename(new URL(url).pathname) || "file";
+        const out = opts.out || suggested;
+        await writeFile(out, bytes);
+        ok({ path: out, bytes: bytes.byteLength }, () => {
+          line(pc.green("Saved ") + pc.bold(out) + pc.dim(`  ${bytes.byteLength} bytes`));
         });
       }),
     );
@@ -995,13 +1039,56 @@ function printRun(run: any, compact = false): void {
   }
   if (!compact && run?.output) {
     line("");
-    line(
+    // `output` gained a second channel: `{ message, files }`. Printing the
+    // whole object as JSON buried the reply the person came to read under the
+    // file list, so the message is printed as the text it is and the files get
+    // their own block below.
+    const message =
       typeof run.output === "string"
         ? run.output
-        : JSON.stringify(run.output, null, 2),
-    );
+        : typeof run.output?.message === "string"
+          ? run.output.message
+          : JSON.stringify(run.output, null, 2);
+    line(message);
+  }
+  // WHAT IT MADE. A run used to return only a sentence, so a report it wrote
+  // showed up here — if at all — as a URL inside a paragraph. `artifacts` is
+  // the run's own record of its files; `output.files` is the same list on a
+  // run whose detail read did not include the relation.
+  if (!compact) {
+    const files = run?.artifacts?.length ? run.artifacts : (run?.output?.files ?? []);
+    if (files.length) {
+      line("");
+      line(pc.bold(files.length === 1 ? "File" : "Files"));
+      for (const f of files) {
+        const size = fileSize(f?.file_size);
+        line(
+          "  " +
+            (f?.name ?? f?.type ?? "file") +
+            (size ? pc.dim(`  ${size}`) : "") +
+            (f?.url ? pc.dim(`\n    ${f.url}`) : ""),
+        );
+      }
+      if (run?.artifacts?.length) {
+        line(
+          "  " +
+            pc.dim(
+              `workser agent-cloud artifact ${run.artifacts[0].id} --out ./file`,
+            ),
+        );
+      }
+    }
   }
   if (run?.error?.message) line("  " + pc.red(run.error.message));
+}
+
+/** `file_size` arrives as a bigint string from Postgres. */
+function fileSize(value: unknown): string {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1_048_576) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1_048_576).toFixed(1)} MB`;
 }
 
 function formatDuration(ms: number): string {

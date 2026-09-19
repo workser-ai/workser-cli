@@ -29,8 +29,11 @@ import { registerCheckpoint } from "./commands/checkpoint.js";
 import { registerSync } from "./commands/sync.js";
 import { registerWorkflow } from "./commands/workflow.js";
 import { registerConnection } from "./commands/connection.js";
+import { registerAutomation } from "./commands/automation.js";
 import { registerChannels } from "./commands/channel.js";
 import { registerTool } from "./commands/tool.js";
+import { registerComputer } from "./commands/computer.js";
+import { registerCode } from "./commands/code.js";
 import { registerMemory } from "./commands/memory.js";
 import { registerNote } from "./commands/note.js";
 import { registerBusiness } from "./commands/business.js";
@@ -128,8 +131,18 @@ registerCheckpoint(program);
 registerSync(program);
 registerWorkflow(program);
 registerConnection(program);
+registerAutomation(program);
 registerChannels(program);
 registerTool(program);
+// Workser Computer (WCOMP-050). Same daemon socket as `tool`, but the run
+// protocol's half: start runs, steer them, collect artifacts. Registered
+// beside the `tool` mount, the help topic in `scripts/build-help.mjs` and the
+// two skill index rows.
+registerComputer(program);
+// Workser Code (WCOMP-051). The capability half of the same `/computer`
+// namespace: the CLI submits requirements, follows the durable run, and reads
+// its preview/artifact/revision references — no credential ever passes here.
+registerCode(program);
 registerMemory(program);
 registerNote(program);
 registerBusiness(program);

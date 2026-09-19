@@ -2,7 +2,7 @@
 topic: automation
 title: Workflows & connected apps
 summary: Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.
-commands: [workflow, connection]
+commands: [workflow, connection, automation]
 ---
 
 # Workflows & connected apps
@@ -21,6 +21,11 @@ workser connection search "<query>" [--toolkit <slug>] [--limit N]  # find an ac
 workser connection connect <toolkit> | disconnect <connectionId>
 workser connection tools <toolkit>          # browse one connected toolkit's actions
 workser connection run <toolSlug> [--body <json>]  # execute one action
+
+workser automation list | get <automationId>
+workser automation trigger create <automationId> --type <type> [--body <json>]
+workser automation trigger list <automationId> | get <triggerId> | events <triggerId>
+workser automation runs <automationId> | run <automationTaskId>
 ```
 
 ## Building a workflow
@@ -47,6 +52,17 @@ Created workflows start inactive: `workser workflow activate <id>` when it's rea
 
 **A `run` is a real side effect in someone's real account.** Sending an email or
 charging a card is not a dry run — say what you're about to do before you do it.
+
+## Inspecting an AI automation
+
+Use `workser automation trigger ...` for schedule, app-event, and chat-webhook
+configuration. The trigger type and its provider-specific fields come from the
+existing automation record; discover connected-app action slugs with
+`workser connection search` or `connection tools` instead of inventing them.
+
+`workser automation runs <automationId>` links trigger processing to the work it
+started. `workser automation run <automationTaskId>` follows an Agent Cloud target
+to its Workser Computer run and returns both records in one machine-readable result.
 
 ## The half people forget
 

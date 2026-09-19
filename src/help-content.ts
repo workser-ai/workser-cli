@@ -725,7 +725,7 @@ to.
     topic: "automation",
     title: "Workflows & connected apps",
     summary: "Build automations that outlive the run; use Gmail, Slack, Stripe, Sheets.",
-    commands: ["workflow","connection"],
+    commands: ["workflow","connection","automation"],
     source: "skills/workser/reference/automation.md",
     body: `# Workflows & connected apps
 
@@ -743,6 +743,11 @@ workser connection search "<query>" [--toolkit <slug>] [--limit N]  # find an ac
 workser connection connect <toolkit> | disconnect <connectionId>
 workser connection tools <toolkit>          # browse one connected toolkit's actions
 workser connection run <toolSlug> [--body <json>]  # execute one action
+
+workser automation list | get <automationId>
+workser automation trigger create <automationId> --type <type> [--body <json>]
+workser automation trigger list <automationId> | get <triggerId> | events <triggerId>
+workser automation runs <automationId> | run <automationTaskId>
 \`\`\`
 
 ## Building a workflow
@@ -769,6 +774,17 @@ Created workflows start inactive: \`workser workflow activate <id>\` when it's r
 
 **A \`run\` is a real side effect in someone's real account.** Sending an email or
 charging a card is not a dry run — say what you're about to do before you do it.
+
+## Inspecting an AI automation
+
+Use \`workser automation trigger ...\` for schedule, app-event, and chat-webhook
+configuration. The trigger type and its provider-specific fields come from the
+existing automation record; discover connected-app action slugs with
+\`workser connection search\` or \`connection tools\` instead of inventing them.
+
+\`workser automation runs <automationId>\` links trigger processing to the work it
+started. \`workser automation run <automationTaskId>\` follows an Agent Cloud target
+to its Workser Computer run and returns both records in one machine-readable result.
 
 ## The half people forget
 
@@ -1104,6 +1120,54 @@ check. That is reported as a note, not as a pass.
 `,
   },
   {
+    topic: "code",
+    title: "Workser Code",
+    summary: "Submit a build to the project's coding agent, follow it, fetch its artifacts.",
+    commands: ["code"],
+    source: "skills/workser/reference/code.md",
+    body: `# Workser Code
+
+\`workser code\` hands a requirement to this project's coding agent — the same
+durable task the desktop's task page renders — and follows it from outside:
+
+\`\`\`
+workser code run "<requirements>"            # submit; prints the run id
+workser code run "<requirements>" --wait     # follow until it is done, then print results
+workser code run "<r>" --app <id> --autonomy auto
+workser code status <runId>                  # durable status, survives a CLI restart
+workser code cancel <runId>                  # ask the daemon to stop it
+workser code artifacts <runId>               # artifacts, preview URL, git revision
+\`\`\`
+
+## What you get back
+
+Every subcommand answers \`{"ok":true,"data":…}\` with \`--json\`. \`run\` returns
+\`{taskId, runId, status: "starting"}\` immediately; \`--wait\` polls the durable
+status and ends with the results envelope — the run's preview URL, its
+artifacts, and the managed-git revision the work landed in. A run that ends
+failed or cancelled still answers machine-readably; exit code 1 says so.
+
+## Notes that matter
+
+- **You never handle credentials.** The daemon executes Workser Code with the
+  app's own authority; the CLI only names a project, an app and requirements.
+  Do not look for a key — there is not one to have.
+- **The workspace is where you are standing.** \`run\` submits this folder's cwd,
+  which the daemon verifies is inside the pinned project — \`out_of_scope\`
+  (exit 7) means you are standing outside it. Pass \`--cwd\` to name another
+  folder inside the same project.
+- **The run is durable.** \`status\` and \`artifacts\` re-read the task after this
+  CLI process is gone; a reconnecting agent needs only the run id.
+- **\`cancel\` is a request, not a promise.** It answers \`cancelling\`; confirm
+  the terminal state with \`status\` before claiming the run is stopped.
+- **Needs the Workser app running** — the capability lives in the desktop.
+  \`not_connected\` (exit 4) means no daemon is listening; open Workser, retry.
+- Keep the existing \`workser agent\` / \`workser workflow\` commands for what
+  they already do; \`code\` does not replace them, it is the Computer-scoped
+  path.
+`,
+  },
+  {
     topic: "computer-use",
     title: "Computer-use tools",
     summary: "Files, shell, screen, input, clipboard and browser on this machine.",
@@ -1141,6 +1205,71 @@ user's machine remotely — you're getting it locally, gated by the same safety 
 - **You already have your own tools.** For editing files in this repo, use them. Reach
   for \`workser tool\` when you need something *outside* the project — the screen, the
   clipboard, a browser, another app on the machine.
+`,
+  },
+  {
+    topic: "computer",
+    title: "Workser Computer",
+    summary: "Start runs on this computer, steer them, stop them, collect artifacts.",
+    commands: ["computer"],
+    source: "skills/workser/reference/computer.md",
+    body: `# Workser Computer
+
+\`workser tool\` puts your hands on the machine one call at a time.
+\`workser computer\` starts **tasks** — a whole run with a planner, steps,
+confirmations and artifacts — and gives you the run id to steer it with.
+
+\`\`\`
+workser computer run "<task>"                     # start; prints the run id
+workser computer run "<task>" --wait              # stream until done|failed|stopped|needs_user
+workser computer run "<task>" -m background       # run headless, in parallel
+workser computer status                           # active run, background runs, what needs you
+workser computer list                             # conversations (also: runs, routines)
+workser computer show <conversationId>            # messages, runs, artifacts (after a restart)
+workser computer stop <runId>                     # also: stop active — safe to call twice
+workser computer artifacts                        # what runs produced
+workser computer artifacts get <id> -o <file>     # download one
+workser computer confirm <confirmId> --allow      # answer a needs_user question (--deny, --answer)
+workser computer routines                         # schedules and watches
+\`\`\`
+
+## The modes, and who owns the choice
+
+\`--mode\` defaults to **auto**: a foreground conversation the local app drives.
+\`interactive\` is the same surface, said out loud; \`background\` runs headless in
+parallel; \`cloud\` asks for a cloud run through the authenticated Core endpoint.
+You are **requesting** a mode, not dictating one — the host's start response
+names the owner, and later calls follow that, never a CLI-side guess. A host
+that cannot serve a mode answers with an error envelope; do not retry the same
+call against a different endpoint to work around it.
+
+## What you get back
+
+Everything answers \`{"ok":true,"data":...}\` (or \`{"ok":false,"error":{...}}\`) —
+add \`--json\` and parse, never screen-scrape. \`run\` returns
+\`{conversationId, runId, status}\`; the run id comes from the host's live event
+feed, so on a slow host it may briefly be absent — \`computer show\` resolves it.
+With \`--wait\` the same envelope gains \`status: done|failed|stopped\` and a
+\`summary\`; exit 0, 1 and — when the run is blocked on the user — 5 with a
+\`confirm\` payload the caller answers via \`computer confirm\`.
+
+## Notes that matter
+
+- **State is the host's, not the CLI's.** A CLI restart loses nothing: \`status\`
+  and \`show\` re-read the run. Resume by conversation id, not by memory of what
+  you saw last time.
+- **\`stop\` is idempotent.** Calling it on a run that already ended answers
+  \`{stopped: false}\` with exit 0 — treat that as success, not an error.
+- **Cross-project is refused.** The daemon scopes \`computer\` to the folder
+  you are standing in, like every other \`/v1/*\` route. \`error.code =
+  "out_of_scope"\` (exit 7) means you are standing outside the project.
+- **One screen, one foreground run.** A second foreground message returns 409
+  while a task is on the screen — run it with \`-m background\` instead of
+  retrying the foreground send.
+- **This needs the Workser app running** (the engine lives in the desktop).
+  \`error.code = "not_connected"\` (exit 4) means no daemon is listening — open
+  Workser and retry. Commands that only read (status, list, artifacts) still
+  answer machine-readably when the engine is configured but idle.
 `,
   },
   {
