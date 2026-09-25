@@ -90,6 +90,7 @@ export function registerCode(program: Command): void {
     .option("--autonomy <kind>", "plan (propose first) | ask | auto", "plan")
     .option("--model <model>", "model request for the coding agent")
     .option("--effort <effort>", "reasoning effort for the coding agent")
+    .option("--agent <id>", "the coding agent to write it: claude, codex, cursor, opencode, copilot or workser_code (default: the project's main agent)")
     .option("--wait", "follow the run until it is no longer active, then return its results")
     .option("--timeout <seconds>", "how long --wait follows before giving up (default 1800)", "1800")
     .action(
@@ -111,6 +112,7 @@ export function registerCode(program: Command): void {
             autonomy,
             ...(opts.model && { model: String(opts.model) }),
             ...(opts.effort && { effort: String(opts.effort) }),
+            ...(opts.agent && { agent: String(opts.agent) }),
           },
         });
         if (!opts.wait) {
