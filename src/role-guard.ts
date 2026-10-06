@@ -69,6 +69,15 @@ import { WorkserError } from "./errors.js";
  * of the owner pressing Continue; it still calls the same approval endpoint,
  * and a planning turn or dispatched teammate never receives the marker.
  *
+ * ─── AND WHAT THE OWNER TIGHTENED ───────────────────────────────────────────
+ *
+ * One more thing is refused, and it is the owner's choice, not ours: a project's
+ * workflow settings can remove a verb from a role, or switch off its delegation
+ * (Customize → Rules). The desktop passes exactly those tightenings in
+ * `WORKSER_ROLE_LIMITS` — never the built-in table, so this file still guesses
+ * nothing about who needs what. A run with no tightening carries no such
+ * variable and is unchanged.
+ *
  * NO ROLE MEANS NO LIMIT, still. The CLI is also run by hand and from the
  * manager's own turn, and neither is a dispatched subagent.
  */
@@ -96,6 +105,60 @@ function mayRecordOwnerTaskDecision(role: string): boolean {
   );
 }
 
+/** `workser` calls that hand work to another agent — see `delegation` below. */
+const DELEGATION: Array<[string, string?]> = [
+  ["task", "create"],
+  ["task", "subtask"],
+  ["task", "send-back"],
+  ["task", "start"],
+];
+
+export interface RoleLimits {
+  deny?: string[];
+  no_delegate?: boolean;
+}
+
+/**
+ * The owner's tightenings, read from `WORKSER_ROLE_LIMITS`. Anything that is
+ * not a well-formed list of plain verbs is ignored: a limit is only ever read
+ * as narrower, so garbage must never turn into a refusal of everything.
+ */
+export function parseRoleLimits(value: string | undefined): RoleLimits | null {
+  if (!value) return null;
+  try {
+    const raw = JSON.parse(value) as RoleLimits;
+    const out: RoleLimits = {};
+    if (Array.isArray(raw?.deny)) {
+      const deny = raw.deny.filter((v) => typeof v === "string" && /^[a-z][a-z0-9-]*$/.test(v));
+      if (deny.length) out.deny = deny;
+    }
+    if (raw?.no_delegate === true) out.no_delegate = true;
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Refusal text for the owner's limits, or null when this call is allowed. */
+export function ownerLimitRefusal(
+  role: string,
+  commandArgv: string[],
+  limits: RoleLimits | null,
+): string | null {
+  if (!limits || !commandArgv[0]) return null;
+  const verb = commandArgv[0];
+  if (limits.deny?.includes(verb)) {
+    return `This project's settings don't let the ${role} role run \`workser ${verb}\`. The owner can change that in Customize → Rules.`;
+  }
+  if (
+    limits.no_delegate &&
+    DELEGATION.some(([a, b]) => a === verb && (b === undefined || b === commandArgv[1]))
+  ) {
+    return `This project's settings don't let the ${role} role hand work to other agents. The owner can change that in Customize → Rules.`;
+  }
+  return null;
+}
+
 export function assertRoleMayRun(argv: string[]): void {
   // Still keyed on being a dispatched agent at all: a person at a terminal is
   // the owner, and the owner may approve their own plan.
@@ -104,6 +167,9 @@ export function assertRoleMayRun(argv: string[]): void {
 
   const commandArgv = stripLeadingGlobalOptions(argv);
   if (!commandArgv[0]) return;
+
+  const limited = ownerLimitRefusal(role, commandArgv, parseRoleLimits(process.env.WORKSER_ROLE_LIMITS));
+  if (limited) throw new WorkserError(limited, { code: "role_forbidden" });
 
   const pair = `${commandArgv[0]} ${commandArgv[1] ?? ""}`.trim();
   // `approval request` only READS — it tells the owner the plan is ready. The

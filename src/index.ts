@@ -50,6 +50,7 @@ import { registerGoal } from "./commands/goal.js";
 import { assertRoleMayRun } from "./role-guard.js";
 import { registerDecision } from "./commands/decision.js";
 import { registerDoc } from "./commands/doc.js";
+import { registerRunner } from "./commands/runner.js";
 import { registerDesign } from "./commands/design.js";
 import { registerApi } from "./commands/api.js";
 import { registerAnalysis } from "./commands/analysis.js";
@@ -160,6 +161,9 @@ registerGoal(program);
 registerDecision(program);
 registerDoc(program);
 registerDesign(program);
+// Runner protocol v1 (plan Phase 4): hand a run to a Workser runner here or
+// elsewhere, and follow it live. The run token is never printed.
+registerRunner(program);
 
 /**
  * The role check runs BEFORE commander dispatches.

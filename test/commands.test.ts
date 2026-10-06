@@ -953,6 +953,46 @@ describe("project-channel PM task intake", () => {
     expect(r.json?.error?.code).not.toBe("role_forbidden");
   });
 
+  it("refuses a verb the owner removed from this role, and only that verb", async () => {
+    const limits = JSON.stringify({ deny: ["app"] });
+    const refused = await cli(["app", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "qa", WORKSER_ROLE_LIMITS: limits },
+    });
+    expect(refused.code).toBe(1);
+    expect(refused.json.error.code).toBe("role_forbidden");
+
+    const other = await cli(["board", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "qa", WORKSER_ROLE_LIMITS: limits },
+    });
+    expect(other.json?.error?.code).not.toBe("role_forbidden");
+  });
+
+  it("refuses delegation when the owner switched it off, but not reading the task", async () => {
+    const limits = JSON.stringify({ no_delegate: true });
+    const refused = await cli(
+      ["task", "subtask", "add", "Build it", "--role", "web", "--project", "p_1"],
+      { env: { WORKSER_ROLE: "pm", WORKSER_ROLE_LIMITS: limits } },
+    );
+    expect(refused.json.error.code).toBe("role_forbidden");
+
+    const read = await cli(["task", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "pm", WORKSER_ROLE_LIMITS: limits },
+    });
+    expect(read.json?.error?.code).not.toBe("role_forbidden");
+  });
+
+  it("ignores limits it cannot read, and applies none without a role", async () => {
+    const garbage = await cli(["app", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE: "qa", WORKSER_ROLE_LIMITS: "{nope" },
+    });
+    expect(garbage.json?.error?.code).not.toBe("role_forbidden");
+
+    const byHand = await cli(["app", "list", "--project", "p_1"], {
+      env: { WORKSER_ROLE_LIMITS: JSON.stringify({ deny: ["app"] }) },
+    });
+    expect(byHand.json?.error?.code).not.toBe("role_forbidden");
+  });
+
   it("still prevents a PM from approving its own task with global flags first", async () => {
     const before = stub.requests.length;
     const r = await cli(
