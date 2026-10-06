@@ -1465,7 +1465,6 @@ workser ask "The phone app needs an API to hold its data. Add one?" \\
 |---|---|
 | \`web\` | Next.js site on Workser hosting |
 | \`mobile\` | Expo / React Native phone app |
-| \`desktop\` | Mac/Windows app people install (Electron); installers build on the owner's computer |
 | \`api\` | backend service — \`api-hono\` (TypeScript) or \`api-python\` (FastAPI) |
 
 **Name the kind you actually mean.** Asking for \`web\` because you are unsure is
