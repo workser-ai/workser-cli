@@ -22,8 +22,8 @@
  */
 import type { Command } from "commander";
 import { spawn } from "node:child_process";
-import { writeFileSync, chmodSync } from "node:fs";
-import { resolve } from "node:path";
+import { writeFileSync, chmodSync, existsSync } from "node:fs";
+import { delimiter, join, resolve } from "node:path";
 import pc from "picocolors";
 import { action } from "../run.js";
 import { api, sleep } from "../client.js";
@@ -45,6 +45,29 @@ interface AttachResult {
 /** The runner program: `WORKSER_RUNNER_BIN`, else `workser-runner` on PATH. */
 export function runnerBin(env: NodeJS.ProcessEnv = process.env): string {
   return env.WORKSER_RUNNER_BIN || "workser-runner";
+}
+
+/** Is there a `workser-runner` on this PATH? */
+function onPath(env: NodeJS.ProcessEnv): boolean {
+  const names = process.platform === "win32" ? ["workser-runner.cmd", "workser-runner.exe", "workser-runner"] : ["workser-runner"];
+  return String(env.PATH ?? "")
+    .split(delimiter)
+    .some((dir) => dir && names.some((name) => existsSync(join(dir, name))));
+}
+
+/**
+ * HOW TO START THE RUNNER, WITH NOTHING INSTALLED BY HAND: `WORKSER_RUNNER_BIN`,
+ * else a `workser-runner` on PATH, else npm's `stable` runner through `npx`
+ * (fetched once and cached, the same release every Workser machine follows).
+ */
+export function runnerLaunch(
+  env: NodeJS.ProcessEnv = process.env,
+  has: (env: NodeJS.ProcessEnv) => boolean = onPath,
+): { command: string; args: string[]; shell: boolean; label: string } {
+  if (env.WORKSER_RUNNER_BIN) return { command: env.WORKSER_RUNNER_BIN, args: [], shell: false, label: env.WORKSER_RUNNER_BIN };
+  if (has(env)) return { command: "workser-runner", args: [], shell: process.platform === "win32", label: "workser-runner" };
+  const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+  return { command: npx, args: ["-y", "@workser/runner@stable"], shell: process.platform === "win32", label: "@workser/runner@stable (npx)" };
 }
 
 /** One line for a run event, the way a person reads it. */
@@ -217,13 +240,15 @@ export function registerRunner(program: Command): void {
 
         let child: ReturnType<typeof spawn> | null = null;
         if (opts.start) {
-          child = spawn(runnerBin(), ["--run", runId, "--api", ctx.endpoint, "--workdir", resolve(String(opts.workdir))], {
+          const launch = runnerLaunch();
+          child = spawn(launch.command, [...launch.args, "--run", runId, "--api", ctx.endpoint, "--workdir", resolve(String(opts.workdir))], {
             env: { ...process.env, WORKSER_RUNNER_TOKEN: token, WORKSER_RUNNER_TOKEN_EXPIRES_AT: expires },
             stdio: ["ignore", "inherit", "inherit"],
+            shell: launch.shell,
           });
           child.on("error", (error) => {
             process.stderr.write(
-              `Could not start ${runnerBin()}: ${error.message}. Install @workser/runner or set WORKSER_RUNNER_BIN.\n`,
+              `Could not start ${launch.label}: ${error.message}. Workser needs Node 20+ (with npx) here, or set WORKSER_RUNNER_BIN.\n`,
             );
           });
           process.on("SIGINT", () => child?.kill("SIGTERM"));
@@ -256,9 +281,10 @@ export function registerRunner(program: Command): void {
         process.exitCode = 2;
         return;
       }
-      const child = spawn(runnerBin(), passthrough, { stdio: "inherit", env: process.env });
+      const launch = runnerLaunch();
+      const child = spawn(launch.command, [...launch.args, ...passthrough], { stdio: "inherit", env: process.env, shell: launch.shell });
       child.on("error", (error) => {
-        process.stderr.write(`Could not start ${runnerBin()}: ${error.message}. Install @workser/runner or set WORKSER_RUNNER_BIN.\n`);
+        process.stderr.write(`Could not start ${launch.label}: ${error.message}. Workser needs Node 20+ (with npx) here, or set WORKSER_RUNNER_BIN.\n`);
         process.exitCode = 127;
       });
       const forward = (signal: NodeJS.Signals) => () => child.kill(signal);
