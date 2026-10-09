@@ -7,8 +7,8 @@ commands: [run, runner]
 
 # Workser runner
 
-A Workser job runs wherever a **runner** is: this desktop, an E2B sandbox, the
-project's cloud computer. The runner holds a token for that ONE run, reports
+A Workser job runs wherever a **runner** is: this desktop, an E2B sandbox, an
+AI agent's cloud computer (its own, or the team computer). The runner holds a token for that ONE run, reports
 every step to Workser, and hears stops and answers from any screen.
 
 ```
