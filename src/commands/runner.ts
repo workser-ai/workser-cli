@@ -89,7 +89,7 @@ export function describeEvent(frame: { type?: string; data?: Record<string, any>
     case "preview.ready":
       return `preview ${d.url}`;
     case "ask.raised":
-      return pc.yellow(`needs you: ${d.title ?? "a question"} — answer it in Workser`);
+      return pc.yellow(`request: ${d.title ?? "a question"} — answer it in Workser`);
     case "run.completed":
       return `${pc.green("done")}${d.summary ? `\n${d.summary}` : ""}`;
     case "run.failed":

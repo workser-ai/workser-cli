@@ -1223,7 +1223,7 @@ confirmations and artifacts — and gives you the run id to steer it with.
 workser computer run "<task>"                     # start; prints the run id
 workser computer run "<task>" --wait              # stream until done|failed|stopped|needs_user
 workser computer run "<task>" -m background       # run headless, in parallel
-workser computer status                           # active run, background runs, what needs you
+workser computer status                           # active run, background runs, your requests
 workser computer list                             # conversations (also: runs, routines)
 workser computer show <conversationId>            # messages, runs, artifacts (after a restart)
 workser computer stop <runId>                     # also: stop active — safe to call twice

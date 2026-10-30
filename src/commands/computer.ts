@@ -413,7 +413,7 @@ export function registerComputer(program: Command): void {
 
   computer
     .command("status")
-    .description("Is a run active, what runs in the background, what needs you")
+    .description("Is a run active, what runs in the background, your requests")
     .action(
       action(async ({ ctx }) => {
         const status = await api(ctx, "/v1/computer/status");
