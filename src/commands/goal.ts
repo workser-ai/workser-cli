@@ -293,7 +293,8 @@ export function registerGoal(program: Command): void {
         const row = await api<{ recorded?: boolean }>(
           ctx,
           `/v1/project-goals/${encodeURIComponent(String(args[0]))}/criteria/${encodeURIComponent(String(args[1]))}`,
-          { method: "POST", body: { phase: opts.phase, met, note: opts.note } },
+          // `by`: this run's role, so the plan can say who checked it.
+          { method: "POST", body: { phase: opts.phase, met, note: opts.note, by: ctx.agentRole } },
         );
         ok(row, () =>
           line(
