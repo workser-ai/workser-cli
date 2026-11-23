@@ -87,9 +87,9 @@ export function fail(err: unknown): never {
   } else {
     process.stderr.write(pc.red("✗ ") + e.message + "\n");
     if (e.code === "not_connected") {
-      process.stderr.write(pc.dim("  Open Workser Orbit, or run `workser login` for standalone use.\n"));
+      process.stderr.write(pc.dim("  Open the Workser desktop app on this computer and sign in.\n"));
     } else if (e.status === 401 || e.code === "unauthorized") {
-      process.stderr.write(pc.dim("  Run `workser login` to authenticate.\n"));
+      process.stderr.write(pc.dim("  Sign in again in the Workser desktop app on this computer.\n"));
     } else if (e.code === "no_project") {
       // Deliberately does NOT suggest `project use` or `--project`: the first
       // is owner-only and the second may not leave the folder you are in.

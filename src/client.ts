@@ -244,8 +244,8 @@ export async function api<T = any>(
   } catch (e) {
     throw new WorkserError(
       ctx.mode === "daemon"
-        ? "Can't reach Workser Orbit (local daemon). Is the app running?"
-        : `Can't reach Workser at ${ctx.endpoint}.`,
+        ? "Can't reach the Workser desktop app. Is it open and signed in on this computer?"
+        : `Can't reach Workser at ${ctx.endpoint}. The CLI works through the Workser desktop app: open it on this computer and sign in.`,
       {
         code: "not_connected",
         details: e instanceof Error ? e.message : String(e),

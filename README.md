@@ -16,17 +16,20 @@ Node 20+. If you use **Workser Desktop**, it installs and updates this for you â
 you only need the manual install to use `workser` on its own, alongside Claude
 Code, Codex, Cursor or any other agent.
 
-### Using it standalone
+### The desktop app must be open and signed in
 
-Inside Workser Desktop the CLI talks to the local Orbit daemon, so every call
-flows through the app's approval gates. On its own it talks to the Workser cloud
-API instead:
+The CLI works through the Workser desktop app. When the app is open and signed in
+on this computer it connects the CLI by itself, and every call goes through the
+app's sign-in and approvals. There is no token to create or paste.
 
 ```bash
-workser login            # paste an API token, or pass --token
+workser login            # checks the connection; says what to do when there is none
 workser status           # confirm the connection and the linked project
-workser doctor           # resolved endpoint, mode, token presence (masked)
+workser doctor           # resolved endpoint, mode, and whether the app is connected
 ```
+
+If a command says it can't reach the app, open the Workser desktop app and sign in,
+then run it again.
 
 Point your agent at it by telling it the command exists. For Claude Code, the
 package ships a skill at `skills/workser/SKILL.md`; for Codex, Gemini, Kimi and
@@ -95,12 +98,11 @@ came from.
   pointing at its **local daemon** (`http://127.0.0.1:<port>`). Calls flow through
   the cockpit, which handles **auth (bridge JWT), approval gates, and live progress
   in the UI**. This is how the user *sees* what the agent does.
-- **Standalone / CI:** `workser login --token <t>` saves a session against the
-  **cloud API** for the current `$WORKSER_ENV`. Same commands, no desktop app.
-  Note the session file records the endpoint it logged in against, so switching
-  `$WORKSER_ENV` afterwards needs a fresh `workser login` (or `--endpoint`).
+- **Without the desktop app:** not supported. Workser's API serves these routes only
+  behind the desktop app's sign-in, so the CLI on its own gets "not connected".
+  `workser login` no longer takes a token; it checks the app's connection.
 
-Both speak the same `/v1/...` contract (see `src/client.ts`).
+The `/v1/...` contract is the one the desktop app serves (see `src/client.ts`).
 
 ## Install (dev)
 

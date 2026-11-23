@@ -129,8 +129,9 @@ workser deploy --prod --watch --json            # 8. ship → stable *.workser.a
 ## Reading results
 
 - Success: use `.data` (`.data.url` after deploy, a `.data` array after `list`).
-- Failure: check `.error.code` — `not_connected` (open Orbit, or `workser login`
-  for CI; `workser logout` clears it) · `unauthorized` ·
+- Failure: check `.error.code` — `not_connected` (the Workser desktop app must be
+  open and signed in on this computer; ask the user to open it; `workser login`
+  checks the connection, `workser logout` forgets it) · `unauthorized` ·
   `no_project` (the user links it in Orbit) ·
   `owner_only`/`awaiting_approval` (rules 4–5) · `needs_local_app` (no Workser
   app here, so folder commands cannot run — say so, don't reach for `git`).

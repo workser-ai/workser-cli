@@ -104,7 +104,7 @@ export function describeEvent(frame: { type?: string; data?: Record<string, any>
 function requireCloud(ctx: Context): void {
   if (ctx.mode !== "cloud" || !ctx.token) {
     throw new WorkserError(
-      "`workser run` talks to Workser directly. Use an API key: --endpoint https://api.workser.ai --token <key>, or `workser login` for cloud.",
+      "`workser run` talks to Workser directly. Pass a runner key: --endpoint https://api.workser.ai --token <key>.",
       { code: "cloud_required" },
     );
   }

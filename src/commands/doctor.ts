@@ -89,12 +89,16 @@ export function registerDoctor(program: Command): void {
             `  env:       ${env === "prod" ? pc.yellow(env) : env}` +
               pc.dim(process.env.WORKSER_ENV ? "  ($WORKSER_ENV)" : "  (default)"),
           );
-          line(`  mode:      ${ctx.mode}`);
+          line(
+            `  mode:      ${ctx.mode === "daemon" ? "through the Workser desktop app" : pc.yellow("not connected to the desktop app")}`,
+          );
           line(
             `  token:     ${
               ctx.token
                 ? `${maskToken(ctx.token)} ${pc.dim(`(${tokenSource})`)}`
-                : pc.yellow("none — run `workser login`")
+                : ctx.mode === "daemon"
+                  ? pc.dim("none needed (the app signs calls in)")
+                  : pc.yellow("none")
             }`,
           );
           line(
@@ -124,6 +128,11 @@ export function registerDoctor(program: Command): void {
               ),
             );
           }
+          if (ctx.mode !== "daemon") {
+            line("");
+            line(pc.yellow("  The CLI works through the Workser desktop app."));
+            line(pc.dim("  Open it on this computer and sign in; it connects the CLI by itself."));
+          }
           if (envIgnored) {
             line("");
             line(
@@ -133,7 +142,7 @@ export function registerDoctor(program: Command): void {
             );
             line(
               pc.dim(
-                `  Re-run \`workser login\` to switch (the saved token is tied to ${ctx.endpoint}),`,
+                `  The saved session is tied to ${ctx.endpoint}; the desktop app rewrites it when it starts signed in,`,
               ),
             );
             line(pc.dim(`  or pass --endpoint ${ENV_BASE_URLS[env]}.`));
