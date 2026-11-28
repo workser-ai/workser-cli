@@ -1351,8 +1351,8 @@ should read through \`@workser/app\` (\`workser.db\`, \`workser.business\`) — 
   {
     topic: "deliverables",
     title: "Deliverables & asking the user",
-    summary: "Record finished output on the task, and ask a blocking question.",
-    commands: ["artifact","ask"],
+    summary: "Record finished output on the task, ask a blocking question, and open an app beside the chat.",
+    commands: ["artifact","ask","show"],
     source: "skills/workser/reference/deliverables.md",
     body: `# Deliverables & asking the user
 
@@ -1366,6 +1366,7 @@ workser artifact add <path> --kind <shape> --data <json> [--promote]
 workser artifact run                                  # which task you're attached to
 
 workser ask "<question>" [--type <t>] [--option <o>]  # ask the user, WAIT for the answer
+workser show app <id> [preview|code|cloud]            # open an app beside the chat on this computer
 \`\`\`
 
 ## Record what you produced
@@ -1481,6 +1482,12 @@ do not build a "desktop-style" page instead. That is not what they asked for.
 **Never ask for a secret value this way** — the answer is stored and displayed. Ask
 *where* a key should go, then have the user set it (\`workser env set\` writes it
 without you ever seeing it).
+
+## Show the person an app, beside the chat
+
+\`workser show app <id> [preview|code|cloud]\` opens one of their apps next to the chat on
+this computer: the running app (default), its files, or its cloud. Use it after you
+build or change an app, or when they ask to see it. \`workser project apps\` lists the ids.
 `,
   },
   {

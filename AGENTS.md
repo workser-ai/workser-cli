@@ -103,6 +103,7 @@ workser audio understand "<query>" [--url <u>|--file <p>] [-t <task>]  # transcr
 # file and sends it inline — for anything bigger, `workser storage upload` it and pass --url.
 
 workser ask "<question>" [--type <t>] [--option <o>] # ask the user, WAIT for the answer
+workser show app <id> [preview|code|cloud]          # open an app beside the chat on this computer
 
 # Tasks and subtasks (the plan shown in Orbit)
 workser task show [id]                              # inspect the task and its current plan

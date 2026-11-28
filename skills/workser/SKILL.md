@@ -32,7 +32,7 @@ screen long. Find your row, run that **one** command — every line costs you.
 | Hand a subtask to another agent | `agent …` | `workser help roles` |
 | **Build an AI agent — any agent, for anyone** | `agent-cloud …` | `workser help agent-cloud` |
 | Recall across conversations; leave this task's team a fact | `memory …`, `workser note` | `workser help memory` |
-| Record finished output, or ask the user a question | `artifact …`, `ask` | `workser help deliverables` |
+| Record finished output, ask the user a question, or open an app beside the chat | `artifact …`, `ask`, `show app` | `workser help deliverables` |
 | Control this machine — files, shell, screen, browser | `tool …` | `workser help computer-use` |
 
 `workser help` lists them all; `workser <command> --help` gives exact flags —
